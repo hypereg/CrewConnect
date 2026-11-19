@@ -3,7 +3,8 @@ export const HEIGHT = 354;
 export const DECKS = [
   {id: 4, name: 'Entertainment Place'},
   {id: 5, name: 'Royal Promenade'},
-  {id: 6, name: 'Boardwalk'}
+  {id: 6, name: 'Boardwalk'},
+  {id: 7, name: 'Kabiny i ścianka wspinaczkowa'}
 ];
 
 export const CATEGORIES = {
@@ -13,6 +14,9 @@ export const CATEGORIES = {
   shop: {label: 'Zakupy', mark: '◇', color: '#a13764', pale: '#fae9f2'},
   other: {label: 'Inne', mark: '•', color: '#50736d', pale: '#e7f0ec'}
 };
+
+const climbingWall = {id: 'rock-climbing-wall', name: 'Ścianka wspinaczkowa', category: 'fun', deck: 7, x: 839, y: 210,
+  description: 'Wejście do strefy wspinaczkowej w części rufowej.', keywords: 'rock climbing wall sport'};
 
 export const DEFAULT_PLACES = [
   {id: 'royal-theater', name: 'Royal Theater', category: 'fun', deck: 4, x: 191, y: 144, description: 'Główna sala teatralna w dziobowej części statku.', keywords: 'teatr show'},
@@ -24,8 +28,13 @@ export const DEFAULT_PLACES = [
   {id: 'main-dining', name: 'Main Dining Room', category: 'food', deck: 5, x: 802, y: 210, description: 'Wejście do głównej restauracji od strony rufy.', keywords: 'restauracja jadalnia'},
   {id: 'carousel', name: 'Boardwalk Carousel', category: 'fun', deck: 6, x: 748, y: 144, description: 'Karuzela w otwartej strefie Boardwalk.', keywords: 'karuzela'},
   {id: 'sugar-beach', name: 'Sugar Beach', category: 'shop', deck: 6, x: 775, y: 210, description: 'Sklep ze słodyczami przy Boardwalk.', keywords: 'sklep słodycze lody'},
-  {id: 'aquatheater', name: 'AquaTheater', category: 'fun', deck: 6, x: 864, y: 177, description: 'Teatr wodny na rufie.', keywords: 'teatr wodny spektakl'}
+  {id: 'aquatheater', name: 'AquaTheater', category: 'fun', deck: 6, x: 864, y: 177, description: 'Teatr wodny na rufie.', keywords: 'teatr wodny spektakl'},
+  climbingWall
 ];
+
+export function withClimbingWall(places) {
+  return places.length >= 100 || places.some(place => place.id === climbingWall.id) ? places : [...places, climbingWall];
+}
 
 const HALL_X = [122, 230, 310, 432, 550, 650, 720, 805, 864];
 const HALL_Y = [144, 210];

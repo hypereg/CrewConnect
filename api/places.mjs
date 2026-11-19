@@ -1,9 +1,10 @@
 import {createHash, randomUUID, timingSafeEqual} from 'node:crypto';
 import {MongoClient} from 'mongodb';
-import {CATEGORIES, DEFAULT_PLACES, isAccessPoint} from '../dist/ship-data.mjs';
+import {CATEGORIES, DEFAULT_PLACES, isAccessPoint, withClimbingWall} from '../dist/ship-data.mjs';
 
 const {MONGODB_URI, MONGODB_DATABASE = 'crewconnect', FRONTEND_ORIGIN, MAP_ADMIN_PASSWORD} = process.env;
 const shipId = 'wonder-of-the-seas';
+const seedVersion = 2;
 const hash = value => createHash('sha256').update(value).digest();
 const adminHash = MAP_ADMIN_PASSWORD ? hash(MAP_ADMIN_PASSWORD) : null;
 const send = (res, status, body) => res.writeHead(status, {'Content-Type': 'application/json; charset=utf-8'}).end(JSON.stringify(body));
@@ -20,9 +21,14 @@ function catalogCollection() {
 
 async function readCatalog(collection) {
   const existing = await collection.findOne({_id: shipId});
-  if (existing) return existing;
+  if (existing) {
+    if (existing.seedVersion === seedVersion) return existing;
+    const fields = {places: withClimbingWall(existing.places), revision: existing.revision + 1, seedVersion};
+    const result = await collection.updateOne({_id: shipId, revision: existing.revision}, {$set: fields});
+    return result.matchedCount ? {...existing, ...fields} : collection.findOne({_id: shipId});
+  }
   try {
-    await collection.updateOne({_id: shipId}, {$setOnInsert: {places: DEFAULT_PLACES, revision: 0}}, {upsert: true});
+    await collection.updateOne({_id: shipId}, {$setOnInsert: {places: DEFAULT_PLACES, revision: 0, seedVersion}}, {upsert: true});
   } catch (error) {
     if (error.code !== 11000) throw error;
   }

@@ -1,18 +1,20 @@
 import {
-  ACCESS_POINTS, CATEGORIES, DECKS, DEFAULT_PLACES, WIDTH, HEIGHT, isAccessPoint,
-  metersBetween, nearestAccess, planRoute
-} from './ship-data.mjs';
-import {drawDeck} from './ship-canvas.mjs';
+  ACCESS_POINTS, CATEGORIES, DECKS, DEFAULT_PLACES, isAccessPoint,
+  metersBetween, nearestAccess, planRoute, withClimbingWall
+} from './ship-data.mjs?v=2';
+import {DECK_GAP, SCENE_WIDTH, SCENE_HEIGHT, drawDeck, drawRouteArrows, projectPoint, unprojectPoint} from './ship-canvas.mjs?v=5';
 
 const el = id => document.getElementById(id);
 const canvas = el('deck-map');
+const motion = el('route-motion');
 const stage = el('map-stage');
 const mapSpace = el('map-space');
 const viewport = el('map-viewport');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const apiBase = document.querySelector('meta[name="crewconnect-api"]').content;
 const api = apiBase ? new URL('/api/places', apiBase) : new URL('api/places', location.href);
-const storageKey = 'crewconnect-wonder-map-v1';
+const storageKey = 'crewconnect-wonder-map-v2';
+const legacyStorageKey = 'crewconnect-wonder-map-v1';
 const esc = text => String(text).replace(/[&<>"']/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 }[character]));
@@ -28,6 +30,9 @@ let panel = 'guest';
 let picking = null;
 let zoom = 1;
 let cameraFrame;
+let arrowFrame;
+let flowStep;
+let sceneVisible = true;
 let drawnDeck;
 let route = null;
 let steps = [];
@@ -41,7 +46,10 @@ const origin = () => originId === 'custom' ? customOrigin : placeById(originId);
 const destination = () => placeById(destinationId);
 const deckOption = ({id}) => `<option value="${id}">${id}</option>`;
 const placeOption = place => `<option value="${esc(place.id)}">${esc(place.name)} · pokład ${place.deck}</option>`;
-const positionStyle = ({x, y}) => `left:${x / WIDTH * 100}%;top:${y / HEIGHT * 100}%`;
+const positionStyle = (point, elevation = 0) => {
+  const {x, y} = projectPoint(point, elevation);
+  return `left:${x / SCENE_WIDTH * 100}%;top:${y / SCENE_HEIGHT * 100}%`;
+};
 const report = message => { el('map-status').textContent = message; };
 
 function directionsFor(result, target) {
@@ -69,10 +77,43 @@ function directionsFor(result, target) {
     if (type === 'stairs') {
       instruction = `${goingUp ? 'Wejdź' : 'Zejdź'} schodami ${end === 'dziobowe' ? 'dziobowymi' : 'rufowymi'} na pokład ${to.deck}`;
     }
-    return {instruction, point: from, endPoint: type === 'walk' ? to : from};
+    return {type, instruction, point: from, endPoint: to, goingUp};
   });
-  instructions.push({instruction: `Cel · ${target.name}`, point: target});
+  instructions.push({type: 'arrival', instruction: `Cel · ${target.name}`, point: target});
   return instructions;
+}
+
+function directionIcon(step) {
+  if (step.type === 'arrival') return '⚑';
+  if (step.type !== 'walk') return step.goingUp ? '↑' : '↓';
+  const from = projectPoint(step.point);
+  const to = projectPoint(step.endPoint);
+  const angle = Math.atan2(to.y - from.y, to.x - from.x);
+  return ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'][(Math.round(angle / (Math.PI / 4)) + 8) % 8];
+}
+
+function updateArrowMotion() {
+  cancelAnimationFrame(arrowFrame);
+  drawRouteArrows(motion, flowStep);
+  if (!sceneVisible || reducedMotion.matches || !flowStep || flowStep.type === 'arrival') return;
+  const began = performance.now();
+  let lastDraw = began;
+  function frame(now) {
+    if (now - lastDraw >= 31) {
+      drawRouteArrows(motion, flowStep, now - began);
+      lastDraw = now;
+    }
+    arrowFrame = requestAnimationFrame(frame);
+  }
+  arrowFrame = requestAnimationFrame(frame);
+}
+
+function neighborFor(step) {
+  if (step?.type === 'lift' || step?.type === 'stairs') {
+    return {deck: step.endPoint.deck, elevation: step.goingUp ? DECK_GAP : -DECK_GAP};
+  }
+  const direction = DECKS.some(item => item.id === deck + 1) ? 1 : -1;
+  return {deck: deck + direction, elevation: direction * DECK_GAP};
 }
 
 function calculateRoute() {
@@ -127,9 +168,11 @@ function renderDeck() {
     'Kliknij wejście do miejsca. Pinezka wskoczy na najbliższy korytarz.';
   const navigating = panel === 'guest';
   const from = navigating ? origin() : null;
-  const current = navigating ? steps[stepIndex]?.point : null;
+  const step = navigating && !picking && steps[stepIndex]?.point.deck === deck ? steps[stepIndex] : null;
+  const neighbor = neighborFor(step);
+  const current = step?.point;
   const pin = from?.deck === deck ? `<span class="map-pin start-pin" style="${positionStyle(from)}" aria-hidden="true">●</span>` : '';
-  const waypoint = current?.deck === deck ?
+  const waypoint = current && step.type !== 'arrival' ?
     `<span class="current-waypoint" style="${positionStyle(current)}" aria-hidden="true"></span>` : '';
   const markers = catalog.places.filter(place => place.deck === deck).map(place => {
     const category = CATEGORIES[place.category];
@@ -140,8 +183,16 @@ function renderDeck() {
       <span aria-hidden="true">${category.mark}</span><span class="pin-label" aria-hidden="true">${esc(place.name)}</span>
     </button>`;
   }).join('');
-  el('map-pins').innerHTML = markers + pin + waypoint;
-  drawDeck(canvas, deck, navigating ? route?.legs ?? [] : [], panel === 'admin' ? draft : null);
+  const labelPoint = {x: 161, y: 192};
+  const level = neighbor.elevation > 0 ? 'wyższy' : 'niższy';
+  el('map-pins').innerHTML = `
+    <button type="button" class="layer-label" data-layer-deck="${neighbor.deck}" style="${positionStyle(labelPoint, neighbor.elevation)}"
+      aria-label="Pokaż ${level} pokład ${neighbor.deck}">Pokład ${neighbor.deck} <span aria-hidden="true">${neighbor.elevation > 0 ? '↑' : '↓'}</span></button>
+    <span class="layer-label layer-active" style="${positionStyle(labelPoint)}" aria-hidden="true">Pokład ${deck}</span>
+    ${markers}${pin}${waypoint}`;
+  drawDeck(canvas, deck, neighbor, navigating && !picking ? route?.legs ?? [] : [], step, panel === 'admin' ? draft : null);
+  flowStep = step;
+  updateArrowMotion();
 }
 
 function renderRoute() {
@@ -154,7 +205,8 @@ function renderRoute() {
     card.innerHTML = '<h2 id="route-title">Trasa</h2><p class="route-empty">Wybierz punkt startowy i miejsce docelowe.</p>';
     return;
   }
-  el('map-step-count').textContent = `Krok ${stepIndex + 1} z ${steps.length}`;
+  el('map-step-count').textContent = `Krok ${stepIndex + 1} z ${steps.length} · pokład ${steps[stepIndex].point.deck}`;
+  el('map-maneuver').textContent = directionIcon(steps[stepIndex]);
   el('map-instruction').textContent = steps[stepIndex].instruction;
   el('previous-step').disabled = stepIndex === 0;
   el('next-step').disabled = stepIndex === steps.length - 1;
@@ -171,16 +223,20 @@ function renderRoute() {
 
 function cameraCenter() {
   return {
-    x: (viewport.scrollLeft + viewport.clientWidth / 2 - stage.offsetLeft) / stage.offsetWidth * WIDTH,
-    y: (viewport.scrollTop + viewport.clientHeight / 2 - stage.offsetTop) / stage.offsetHeight * HEIGHT
+    x: (viewport.scrollLeft + viewport.clientWidth / 2 - stage.offsetLeft) / stage.offsetWidth * SCENE_WIDTH,
+    y: (viewport.scrollTop + viewport.clientHeight / 2 - stage.offsetTop) / stage.offsetHeight * SCENE_HEIGHT
   };
+}
+
+function fittedWidth() {
+  return Math.min(viewport.clientWidth, viewport.clientHeight * SCENE_WIDTH / SCENE_HEIGHT);
 }
 
 function paintCamera(scale, point) {
   zoom = scale;
-  mapSpace.style.setProperty('--map-width', Math.round(viewport.clientWidth * zoom) + 'px');
-  viewport.scrollLeft = stage.offsetLeft + point.x / WIDTH * stage.offsetWidth - viewport.clientWidth / 2;
-  viewport.scrollTop = stage.offsetTop + point.y / HEIGHT * stage.offsetHeight - viewport.clientHeight / 2;
+  mapSpace.style.setProperty('--map-width', Math.round(fittedWidth() * zoom) + 'px');
+  viewport.scrollLeft = stage.offsetLeft + point.x / SCENE_WIDTH * stage.offsetWidth - viewport.clientWidth / 2;
+  viewport.scrollTop = stage.offsetTop + point.y / SCENE_HEIGHT * stage.offsetHeight - viewport.clientHeight / 2;
   viewport.classList.toggle('zoomed', zoom > 1.01);
   el('map-pan-hint').hidden = zoom <= 1.01;
   el('zoom-out').disabled = zoom <= 1.001;
@@ -190,7 +246,7 @@ function paintCamera(scale, point) {
 function moveCamera(scale, point = cameraCenter(), animate = true) {
   cancelAnimationFrame(cameraFrame);
   const targetZoom = Math.max(1, Math.min(2.4, scale));
-  const target = targetZoom === 1 ? {x: WIDTH / 2, y: HEIGHT / 2} : point;
+  const target = targetZoom === 1 ? {x: SCENE_WIDTH / 2, y: SCENE_HEIGHT / 2} : point;
   if (!animate || reducedMotion.matches) {
     paintCamera(targetZoom, target);
     return;
@@ -216,20 +272,27 @@ function framePoints(points) {
     moveCamera(1);
     return;
   }
-  const xs = points.map(point => point.x);
-  const ys = points.map(point => point.y);
+  const projected = points.map(point => projectPoint(point, point.elevation));
+  const xs = projected.map(point => point.x);
+  const ys = projected.map(point => point.y);
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
-  const horizontal = WIDTH / (maxX - minX + 290);
-  const vertical = viewport.clientHeight / viewport.clientWidth * WIDTH / (maxY - minY + 180);
+  const fitted = fittedWidth();
+  const horizontal = viewport.clientWidth / fitted * SCENE_WIDTH / (maxX - minX + 290);
+  const vertical = viewport.clientHeight / fitted * SCENE_WIDTH / (maxY - minY + 180);
   moveCamera(Math.min(2.15, horizontal, vertical), {x: (minX + maxX) / 2, y: (minY + maxY) / 2});
 }
 
 function focusStep(step) {
-  if (step) framePoints([step.point, step.endPoint ?? step.point]);
-  else moveCamera(1);
+  if (!step) {
+    moveCamera(1);
+    return;
+  }
+  const end = step.type === 'lift' || step.type === 'stairs' ?
+    {...step.point, elevation: step.goingUp ? DECK_GAP : -DECK_GAP} : step.endPoint ?? step.point;
+  framePoints([step.point, end]);
 }
 
 function revealMapOnMobile() {
@@ -356,6 +419,10 @@ async function loadCatalog() {
     try {
       const local = JSON.parse(localStorage.getItem(storageKey));
       if (validPlaces(local)) next = {...next, places: local, storage: 'demo'};
+      else if (local === null) {
+        const previous = JSON.parse(localStorage.getItem(legacyStorageKey));
+        if (validPlaces(previous)) next = {...next, places: withClimbingWall(previous), storage: 'demo'};
+      }
     } catch {
       // A damaged browser cache can be replaced by the sample catalog.
     }
@@ -471,9 +538,8 @@ for (const input of document.querySelectorAll('[name="transport"]')) {
 }
 el('deck-tabs').innerHTML = DECKS.map(({id}) =>
   `<button type="button" data-deck="${id}" aria-label="Pokład ${id}">${id}</button>`).join('');
-el('deck-tabs').addEventListener('click', event => {
-  const selected = Number(event.target.closest('[data-deck]')?.dataset.deck);
-  if (!selected) return;
+function switchDeck(selected) {
+  if (!DECKS.some(item => item.id === selected)) return;
   deck = selected;
   if (picking === 'place') {
     el('place-deck').value = String(deck);
@@ -485,8 +551,18 @@ el('deck-tabs').addEventListener('click', event => {
   const points = !picking && panel === 'guest' ? (route?.legs ?? []).flatMap(leg =>
     [leg.from, leg.to].filter(point => point.deck === deck)) : [];
   framePoints(points);
+}
+el('deck-tabs').addEventListener('click', event => {
+  switchDeck(Number(event.target.closest('[data-deck]')?.dataset.deck));
 });
 el('map-pins').addEventListener('click', event => {
+  const layer = event.target.closest('[data-layer-deck]');
+  if (layer) {
+    const selected = Number(layer.dataset.layerDeck);
+    switchDeck(selected);
+    el('deck-tabs').querySelector(`[data-deck="${selected}"]`)?.focus({preventScroll: true});
+    return;
+  }
   const place = placeById(event.target.closest('[data-place]')?.dataset.place);
   if (!place) return;
   if (picking === 'place') setDraft(place);
@@ -528,6 +604,12 @@ el('zoom-out').addEventListener('click', () => moveCamera(zoom - 0.35));
 el('zoom-in').addEventListener('click', () => moveCamera(zoom + 0.35));
 el('zoom-fit').addEventListener('click', () => moveCamera(1));
 new ResizeObserver(() => moveCamera(zoom, cameraCenter(), false)).observe(viewport);
+new IntersectionObserver(([entry]) => {
+  if (sceneVisible === entry.isIntersecting) return;
+  sceneVisible = entry.isIntersecting;
+  updateArrowMotion();
+}).observe(viewport);
+reducedMotion.addEventListener('change', updateArrowMotion);
 viewport.addEventListener('wheel', event => {
   if (!event.ctrlKey) return;
   event.preventDefault();
@@ -564,8 +646,10 @@ for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
 canvas.addEventListener('click', event => {
   if (!picking || moved) return;
   const bounds = canvas.getBoundingClientRect();
-  const x = (event.clientX - bounds.left) / bounds.width * WIDTH;
-  const y = (event.clientY - bounds.top) / bounds.height * HEIGHT;
+  const {x, y} = unprojectPoint({
+    x: (event.clientX - bounds.left) / bounds.width * SCENE_WIDTH,
+    y: (event.clientY - bounds.top) / bounds.height * SCENE_HEIGHT
+  });
   if (x < 85 || x > 900 || y < 58 || y > 296) {
     el('pick-banner').textContent = 'Wskaż miejsce wewnątrz planu statku.';
     report('Wskaż miejsce wewnątrz planu statku.');
