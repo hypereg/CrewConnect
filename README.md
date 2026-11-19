@@ -1,11 +1,12 @@
-# CrewConnect z MySQL
+# CrewConnect z MongoDB Atlas
 
-Backend wymaga Node.js 22 i dostępu sieciowego do MySQL ZUT. Uruchom go na komputerze lub serwerze z dostępem do sieci uczelni albo VPN.
+Backend wymaga Node.js 22 oraz dostępu do klastra Atlas. W Atlas dodaj adres IP serwera aplikacji do listy dostępu i nadaj użytkownikowi bazy prawo odczytu oraz zapisu w bazie `crewconnect`.
 
-1. Uruchom `npm install`.
-2. Skopiuj `.env.example` do `.env` i uzupełnij `MYSQL_PASSWORD` nowym hasłem. W hostingu ustaw te wartości jako zmienne środowiskowe. Plik `.env` jest ignorowany przez Git.
-3. Uruchom `node --env-file=.env server.mjs` i otwórz `http://localhost:3000`. Aplikacja tworzy tabelę `crewconnect_workspaces` przy starcie, więc konto potrzebuje uprawnienia CREATE w swojej bazie.
+1. Uruchom `npm ci`.
+2. Skopiuj `.env.example` do `.env` i ustaw `MONGODB_URI` na adres połączenia Atlas. W hostingu ustaw go jako sekret środowiskowy. Plik `.env` jest ignorowany przez Git.
+3. Uruchom `node --env-file=.env server.mjs` i otwórz `http://localhost:3000`.
+4. Na serwerze HTTPS ustaw `NODE_ENV=production`. Przy wdrożeniu w kontenerze ustaw dodatkowo `HOST=0.0.0.0`.
 
-Dane demonstracyjne są zapisywane jako stan danego obszaru roboczego w MySQL. Losowy identyfikator w ciasteczku HttpOnly wiąże obszar z przeglądarką. Profile demo w tym obszarze współdzielą wydarzenia i raporty. Przy utracie połączenia zmiany zostają w pamięci przeglądarki i są wysyłane po ponownym połączeniu. Do uruchomienia za HTTPS ustaw `NODE_ENV=production`.
+Domyślna baza to `crewconnect`, a kolekcja `workspaces` powstaje przy pierwszym zapisie. Losowy identyfikator w ciasteczku HttpOnly wiąże obszar roboczy z przeglądarką. W jednym obszarze profile demo współdzielą wydarzenia i raporty. Zmiany offline są przechowywane lokalnie i synchronizowane po odzyskaniu połączenia.
 
-Statyczne wdrożenie Sites nie uruchamia tego serwera Node i nadal zapisuje dane lokalnie.
+Wcześniejsze dane zapisane w przeglądarce mogą zostać zsynchronizowane po uruchomieniu backendu. Rekordy przechowywane wyłącznie w MySQL wymagają osobnej migracji. Statyczne demo Sites korzysta z pamięci przeglądarki. Do użycia Atlas online uruchom serwer Node.js na hostingu z dostępem do klastra.

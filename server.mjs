@@ -1,21 +1,20 @@
 import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import mysql from 'mysql2/promise';
+import { MongoClient } from 'mongodb';
 
-const { MYSQL_HOST, MYSQL_PORT = '3306', MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD, PORT = '3000' } = process.env;
-if (!MYSQL_HOST || !MYSQL_DATABASE || !MYSQL_USER || !MYSQL_PASSWORD) {
-  throw new Error('Set MYSQL_HOST, MYSQL_DATABASE, MYSQL_USER and MYSQL_PASSWORD before starting.');
+const { MONGODB_URI, MONGODB_DATABASE = 'crewconnect', PORT = '3000' } = process.env;
+if (!MONGODB_URI) throw new Error('Set MONGODB_URI before starting.');
+const client = new MongoClient(MONGODB_URI, {maxPoolSize: 5, serverSelectionTimeoutMS: 5000});
+const db = client.db(MONGODB_DATABASE);
+try {
+  await db.command({ping: 1});
+} catch (error) {
+  await client.close();
+  console.error('MongoDB connection failed:', error.code ?? error.name);
+  process.exit(1);
 }
-const pool = mysql.createPool({
-  host: MYSQL_HOST, port: Number(MYSQL_PORT), database: MYSQL_DATABASE,
-  user: MYSQL_USER, password: MYSQL_PASSWORD, connectionLimit: 5, connectTimeout: 5000
-});
-await pool.query(`CREATE TABLE IF NOT EXISTS crewconnect_workspaces (
-  workspace_id CHAR(64) PRIMARY KEY,
-  snapshot JSON NOT NULL,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-)`);
+const workspaces = db.collection('workspaces');
 
 const assets = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
@@ -41,10 +40,8 @@ createServer(async (req, res) => {
         res.setHeader('Set-Cookie', `crew_workspace=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000${secure}`);
       }
       if (req.method === 'GET') {
-        const [rows] = await pool.execute('SELECT snapshot FROM crewconnect_workspaces WHERE workspace_id = ?', [id]);
-        const snapshot = rows[0]?.snapshot ?? null;
-        const json = typeof snapshot === 'string' ? snapshot : JSON.stringify(snapshot);
-        return res.writeHead(200, {'Content-Type': 'application/json'}).end(json);
+        const workspace = await workspaces.findOne({_id: id}, {projection: {snapshot: 1}});
+        return res.writeHead(200, {'Content-Type': 'application/json'}).end(JSON.stringify(workspace?.snapshot ?? null));
       }
       if (req.headers['content-type']?.split(';')[0] !== 'application/json') return res.writeHead(415).end();
       const chunks = [];
@@ -63,9 +60,11 @@ createServer(async (req, res) => {
       if (!snapshot || typeof snapshot.member !== 'string' || !Array.isArray(snapshot.events) || !Array.isArray(snapshot.reports)) {
         return res.writeHead(400).end();
       }
-      const json = JSON.stringify(snapshot);
-      await pool.execute(`INSERT INTO crewconnect_workspaces (workspace_id, snapshot)
-        VALUES (?, ?) ON DUPLICATE KEY UPDATE snapshot = ?`, [id, json, json]);
+      await workspaces.updateOne(
+        {_id: id},
+        {$set: {snapshot, updatedAt: new Date()}},
+        {upsert: true}
+      );
       return res.writeHead(204).end();
     }
     const asset = assets.get(path);
