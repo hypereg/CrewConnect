@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { MongoClient } from 'mongodb';
 
-const { MONGODB_URI, MONGODB_DATABASE = 'crewconnect', PORT = '3000' } = process.env;
+const { MONGODB_URI, MONGODB_DATABASE = 'crewconnect', FRONTEND_ORIGIN, PORT = '3000' } = process.env;
 if (!MONGODB_URI) throw new Error('Set MONGODB_URI before starting.');
 const client = new MongoClient(MONGODB_URI, {maxPoolSize: 5, serverSelectionTimeoutMS: 5000});
 const db = client.db(MONGODB_DATABASE);
@@ -30,14 +30,29 @@ const assets = new Map([
 createServer(async (req, res) => {
   const path = req.url.split('?')[0];
   try {
-    if (path === '/api/workspace' && ['GET', 'PUT'].includes(req.method)) {
+    if (path === '/api/workspace') {
+      const browserOrigin = req.headers.origin;
+      const crossOrigin = Boolean(FRONTEND_ORIGIN && browserOrigin === FRONTEND_ORIGIN);
+      if (crossOrigin) {
+        res.setHeader('Access-Control-Allow-Origin', FRONTEND_ORIGIN);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+        res.setHeader('Access-Control-Expose-Headers', 'X-Workspace-Token');
+      }
+      res.setHeader('Vary', 'Origin');
+      if (req.method === 'OPTIONS') return res.writeHead(crossOrigin ? 204 : 403).end();
+      if (!['GET', 'PUT'].includes(req.method)) return res.writeHead(405).end();
       res.setHeader('Cache-Control', 'no-store');
-      let id = req.headers.cookie?.match(/(?:^|; *)crew_workspace=([a-f0-9]{64})(?:;|$)/)?.[1];
+      let id = crossOrigin ? req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1] :
+        req.headers.cookie?.match(/(?:^|; *)crew_workspace=([a-f0-9]{64})(?:;|$)/)?.[1];
       if (!id) {
         if (req.method === 'PUT') return res.writeHead(401).end();
         id = randomBytes(32).toString('hex');
-        const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-        res.setHeader('Set-Cookie', `crew_workspace=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000${secure}`);
+        if (crossOrigin) res.setHeader('X-Workspace-Token', id);
+        else {
+          const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+          res.setHeader('Set-Cookie', `crew_workspace=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000${secure}`);
+        }
       }
       if (req.method === 'GET') {
         const workspace = await workspaces.findOne({_id: id}, {projection: {snapshot: 1}});

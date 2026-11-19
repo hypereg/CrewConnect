@@ -9,4 +9,10 @@ Backend wymaga Node.js 22 oraz dostępu do klastra Atlas. W Atlas dodaj adres IP
 
 Domyślna baza to `crewconnect`, a kolekcja `workspaces` powstaje przy pierwszym zapisie. Losowy identyfikator w ciasteczku HttpOnly wiąże obszar roboczy z przeglądarką. W jednym obszarze profile demo współdzielą wydarzenia i raporty. Zmiany offline są przechowywane lokalnie i synchronizowane po odzyskaniu połączenia.
 
-Wcześniejsze dane zapisane w przeglądarce mogą zostać zsynchronizowane po uruchomieniu backendu. Rekordy przechowywane wyłącznie w MySQL wymagają osobnej migracji. Statyczne demo Sites korzysta z pamięci przeglądarki. Do użycia Atlas online uruchom serwer Node.js na hostingu z dostępem do klastra.
+## GitHub Pages i Atlas
+
+1. Wdróż backend Node.js na hostingu HTTPS z dostępem do Atlas. Ustaw sekret `MONGODB_URI`, opcjonalną nazwę bazy `MONGODB_DATABASE` oraz `FRONTEND_ORIGIN=https://hypereg.github.io`. Przy wdrożeniu dostarczanym przez platformę ustaw adres nasłuchu `HOST=0.0.0.0`.
+2. W ustawieniach repozytorium wybierz **Pages → Source → GitHub Actions**. W **Secrets and variables → Actions → Variables** ustaw zmienną `CREWCONNECT_API_URL` na publiczny adres HTTPS backendu, bez ścieżki.
+3. Uruchom workflow **Deploy CrewConnect to GitHub Pages**. Wejdź na `https://hypereg.github.io/CrewConnect/`. Bez skonfigurowanego adresu API frontend pracuje w trybie lokalnym.
+
+GitHub Pages hostuje pliki PWA. Backend łączy się z Atlas, a frontend używa prywatnego tokenu obszaru roboczego zapisanego w przeglądarce. Przeglądarka synchronizuje się z API po odzyskaniu połączenia. URI Atlas pozostaje na serwerze.

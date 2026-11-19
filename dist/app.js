@@ -25,15 +25,25 @@ const genderFilters = {all: 'Wszystkich', women: 'Kobiety', men: 'Mężczyzn'};
 const preferredGender = () => state.crewPreferences?.[state.member] ?? 'all';
 const matchesPreference = profile => preferredGender() === 'all' || profile.gender === preferredGender();
 const storageKey = 'crewconnect-v1';
-const pendingKey = 'crewconnect-mysql-pending';
+const pendingKey = 'crewconnect-workspace-pending';
+const apiBase = document.querySelector('meta[name="crewconnect-api"]')?.content;
+const workspaceUrl = apiBase ? new URL('/api/workspace', apiBase).href : 'api/workspace';
+const tokenKey = 'crewconnect-workspace-token:' + workspaceUrl;
 let syncing = false;
 
 async function syncWorkspace() {
   if (syncing || !navigator.onLine) return;
   syncing = true;
   try {
-    const response = await fetch('api/workspace', {cache: 'no-store'});
+    let token = localStorage.getItem(tokenKey);
+    const headers = () => token ? {Authorization: 'Bearer ' + token} : {};
+    const response = await fetch(workspaceUrl, {cache: 'no-store', headers: headers()});
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return;
+    const issuedToken = response.headers.get('X-Workspace-Token');
+    if (issuedToken) {
+      token = issuedToken;
+      localStorage.setItem(tokenKey, token);
+    }
     const snapshot = await response.json();
     let pending = localStorage.getItem(pendingKey);
     if (!pending && snapshot) {
@@ -43,8 +53,8 @@ async function syncWorkspace() {
     }
     if (!pending && !snapshot) pending = localStorage.getItem(storageKey);
     while (pending) {
-      const result = await fetch('api/workspace', {
-        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: pending
+      const result = await fetch(workspaceUrl, {
+        method: 'PUT', headers: {...headers(), 'Content-Type': 'application/json'}, body: pending
       });
       if (!result.ok) return;
       const latest = localStorage.getItem(pendingKey);

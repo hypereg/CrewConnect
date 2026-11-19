@@ -1,0 +1,44 @@
+name: Deploy CrewConnect to GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Configure the API URL
+        env:
+          API_URL: ${{ vars.CREWCONNECT_API_URL }}
+        run: |
+          python3 - <<'PY'
+          import html, os
+          from pathlib import Path
+          from urllib.parse import urlsplit
+          url = os.environ.get('API_URL', '').strip()
+          if url:
+              parsed = urlsplit(url)
+              if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password or parsed.path not in ('', '/') or parsed.query or parsed.fragment:
+                  raise SystemExit('CREWCONNECT_API_URL must be an HTTPS origin')
+              path = Path('dist/index.html')
+              path.write_text(path.read_text().replace('name="crewconnect-api" content=""', f'name="crewconnect-api" content="{html.escape(url, quote=True)}"'))
+          else:
+              print('::warning::CREWCONNECT_API_URL is unset. The frontend will run in local demo mode.')
+          PY
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - uses: actions/deploy-pages@v4
+        id: deployment
