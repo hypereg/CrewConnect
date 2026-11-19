@@ -43,7 +43,7 @@ GitHub Pages hostuje pliki PWA. Backend łączy się z Atlas, a frontend używa 
 
 1. Ustaw jedno wspólne hasło `CREW_PASSWORD` i klucz `NVIDIA_API_KEY` w sekretach środowiskowych backendu.
 2. Każda osoba tworzy własny profil w zakładce **Mój profil**. Harmonogram pobiera nazwy z tych profili. Dawne przydziały przypisane do identyfikatorów z konfiguracji są zachowane w bazie.
-3. Po restarcie wybierz **Warty i obowiązki → Moje przydziały**, wpisz hasło załogi i wybierz profil. Każdy, kto zna wspólne hasło, może wybrać dowolny profil. Przydziały dodasz w **Planie załogi**, a zapisane raporty znajdziesz w **Dzienniku raportów**.
+3. Po restarcie wybierz **Moje przydziały** w stopce poprzedniej wersji, wpisz hasło załogi i wybierz profil. Każdy, kto zna wspólne hasło, może wybrać dowolny profil. Przydziały dodasz w **Planie załogi**, a zapisane raporty znajdziesz w **Dzienniku raportów**.
 
 Kolekcje `crewDuties` i `crewDutyReports` MongoDB przechowują wspólny harmonogram i dziennik. Załoga widzi wszystkie wpisy i może planować przydziały. Zapis wykonania i raportu z przydziału jest dostępny po wybraniu przypisanego profilu. Raporty ze wcześniejszego obszaru roboczego są dostępne w sekcji „Raporty w tej przeglądarce”. Instalacje bez `CREW_PASSWORD` korzystają z trybu demo.
 
