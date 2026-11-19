@@ -82,7 +82,11 @@ export default async function connections(req, res) {
       if (await profiles.countDocuments({_id: {$in: [me, peer]}}) !== 2) {
         return send(res, 404, {error: 'Profil online jest niedostępny.'});
       }
-      await matches.updateOne({_id: id}, {$setOnInsert: {members: [me, peer]}, $addToSet: {likes: me}}, {upsert: true});
+      await matches.updateOne({_id: id}, {$setOnInsert: {members: [me, peer]}, $addToSet: {likes: me}}, {upsert: true})
+        .catch(error => {
+          if (error.code !== 11000) throw error;
+          return matches.updateOne({_id: id}, {$addToSet: {likes: me}});
+        });
       return send(res, 200, {ok: true});
     }
     if (body.action === 'message') {

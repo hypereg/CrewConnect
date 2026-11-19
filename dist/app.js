@@ -286,6 +286,7 @@ function renderUserProfile() {
 let onlineDiscovery;
 let discoveryLoading = false;
 let onlineError = '';
+let onlineSearch = '';
 const skippedOnline = new Set();
 const personalDiscovery = () => Boolean(state.userProfile && state.member === state.userProfile.id);
 const onlinePeer = id => onlineDiscovery?.profiles.find(profile => profile.id === id);
@@ -338,16 +339,27 @@ function renderOnlineDiscovery() {
   const options = values => Object.entries(values).map(([value, label]) =>
     `<option value="${value}" ${filters.intent === value ? 'selected' : ''}>${label}</option>`).join('');
   const interests = new Map(profiles.flatMap(profile => profile.interests.map(item => [interestKey(item), item])));
-  const candidate = profiles.find(profile => matchesDiscoveryFilters(profile) &&
-    !onlineDiscovery.liked.includes(profile.id) && !skippedOnline.has(profile.id));
+  const query = interestKey(onlineSearch);
+  const candidates = query ? profiles.filter(profile => interestKey(profile.name).includes(query)) :
+    profiles.filter(profile => matchesDiscoveryFilters(profile) && !skippedOnline.has(profile.id));
+  const candidate = candidates.find(profile => !onlineDiscovery.liked.includes(profile.id));
+  const waiting = query && candidates.some(profile => onlineDiscovery.liked.includes(profile.id) && !onlineDiscovery.matches.includes(profile.id));
   const matches = profiles.filter(profile => onlineDiscovery.matches.includes(profile.id));
   const card = candidate ? `<article class="crew-card" id="crew-card" data-profile="${candidate.id}">
     <div class="crew-portrait plum"><span aria-hidden="true">${escape(initials(candidate.name))}</span></div>
     <div class="crew-details">${profileDetails(candidate, state.userProfile.interests.map(interestKey))}</div></article>
     <div class="crew-actions"><button class="secondary" data-action="crew-skip" data-profile="${candidate.id}">Pomiń</button>
     <button class="primary" data-action="crew-connect" data-profile="${candidate.id}">Chcę poznać</button></div>` :
-    '<div class="card crew-empty"><h2>Brak nowych profili online</h2><p>Zmień filtry lub poczekaj, aż druga osoba opublikuje swój profil.</p></div>';
-  return heading + error + `<div class="crew-filter">
+    `<div class="card crew-empty"><h2>${waiting ? 'Wysłano polubienie' : 'Brak nowych profili online'}</h2>
+      <p>${waiting ? 'Dopasowanie pojawi się, gdy druga osoba również kliknie „Chcę poznać”.' : 'Sprawdź nazwę, zmień filtry lub poproś drugą osobę o opublikowanie profilu.'}</p></div>`;
+  return heading + error + `
+    <form class="crew-filter crew-search" id="online-people-search">
+      <label for="online-name">Znajdź osobę po nazwie</label>
+      <input id="online-name" type="search" name="name" maxlength="80" value="${escape(onlineSearch)}">
+      <button class="primary" type="submit">Szukaj</button>
+      ${onlineSearch ? '<button class="secondary" type="button" data-action="online-clear-search">Wyczyść</button>' : ''}
+    </form>
+    <div class="crew-filter">
     <label for="crew-gender">Kogo chcesz poznawać?</label><select id="crew-gender">
       ${Object.entries(genderFilters).map(([value, label]) => `<option value="${value}" ${preferredGender() === value ? 'selected' : ''}>${label}</option>`).join('')}
     </select>
@@ -403,7 +415,10 @@ function renderCrew() {
     <div class="card crew-empty"><h2>Brak nowych kart w tym widoku</h2>
     ${visibleProfiles.some(profile => choices[profileId(profile)] === 'skip') ? '<button class="secondary" data-action="crew-revisit">Pokaż pominięte osoby</button>' : ''}</div>`;
   return `<header class="crew-heading"><h1>Poznaj załogę</h1><p class="muted">Znajdź osoby, z którymi chcesz spędzić czas po wachcie.</p>
-    <button class="secondary" data-action="demo-reset">Usuń historię dopasowań</button></header>
+    <div class="crew-filter">
+      ${state.userProfile ? '<button class="primary" data-action="go-online">Przejdź do mojego profilu online</button>' : '<a class="primary" href="#profil">Utwórz własny profil</a>'}
+      <button class="secondary" data-action="demo-reset">Usuń historię dopasowań</button>
+    </div><p class="muted">Oglądasz profile demo. Aby dopasować się ze znajomym na innym urządzeniu, oboje wybierzcie i opublikujcie własny profil.</p></header>
     <div class="crew-filter"><label for="crew-gender">Kogo chcesz poznawać?</label>
       <select id="crew-gender">${Object.entries(genderFilters).map(([value, label]) =>
         `<option value="${value}" ${preferredGender() === value ? 'selected' : ''}>${label}</option>`).join('')}</select>
@@ -547,6 +562,7 @@ function chooseCrewProfile(profile, choice) {
     if (choice === 'connect') void updateOnlineDiscovery({action: 'like', peer: profile});
     else {
       skippedOnline.add(profile);
+      onlineSearch = '';
       render();
     }
     return;
@@ -739,6 +755,14 @@ function vote(event) {
   });
 }
 
+content.addEventListener('submit', event => {
+  if (event.target.id !== 'online-people-search') return;
+  event.preventDefault();
+  onlineSearch = event.target.elements.name.value.trim().slice(0, 80);
+  render();
+  content.querySelector('#online-name')?.focus();
+});
+
 content.addEventListener('click', e => {
   const button = e.target.closest('button[data-action]');
   if (!button) return;
@@ -751,6 +775,19 @@ content.addEventListener('click', e => {
     state.member = state.userProfile.id;
     save('Wybrano Twój profil.');
     content.querySelector('[data-action="profile-edit"]')?.focus();
+    return;
+  }
+  if (action === 'go-online' && state.userProfile) {
+    state.member = state.userProfile.id;
+    save();
+    updateNetwork();
+    void refreshDiscovery();
+    return;
+  }
+  if (action === 'online-clear-search') {
+    onlineSearch = '';
+    render();
+    content.querySelector('#online-name')?.focus();
     return;
   }
   if (action === 'online-publish' && personalDiscovery()) {
