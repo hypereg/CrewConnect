@@ -13,6 +13,9 @@ const viewport = el('map-viewport');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const apiBase = document.querySelector('meta[name="crewconnect-api"]').content;
 const api = apiBase ? new URL('/api/places', apiBase) : new URL('api/places', location.href);
+const params = new URLSearchParams(location.search);
+const choosingPlace = params.get('pick') === '1';
+const requestedPlace = params.get('place');
 const storageKey = 'crewconnect-wonder-map-v2';
 const legacyStorageKey = 'crewconnect-wonder-map-v1';
 const esc = text => String(text).replace(/[&<>"']/g, character => ({
@@ -20,9 +23,9 @@ const esc = text => String(text).replace(/[&<>"']/g, character => ({
 }[character]));
 const searchText = text => text.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/ł/g, 'l');
 const pinStyle = category => `--pin-color:${category.color};--pin-bg:${category.pale}`;
-let catalog = {places: DEFAULT_PLACES, storage: 'loading'};
+let catalog = {places: choosingPlace ? [] : DEFAULT_PLACES, storage: 'loading'};
 let originId = 'guest-services';
-let destinationId = 'casino-royale';
+let destinationId = requestedPlace ?? (choosingPlace ? null : 'casino-royale');
 let customOrigin;
 let deck = 5;
 let transport = 'lift';
@@ -127,7 +130,8 @@ function renderGuestPlaces() {
       <span class="place-icon" aria-hidden="true" style="${pinStyle(category)}">${category.mark}</span>
       <span><strong>${esc(place.name)}</strong><small>Pokład ${place.deck} · ${category.label}</small></span>
     </button></li>`;
-  }).join('') || '<li class="empty-list">Brak pasujących miejsc.</li>';
+  }).join('') || '<li class="empty-list">' + (catalog.storage === 'loading' ? 'Wczytywanie miejsc…' :
+    catalog.storage === 'unavailable' ? 'Katalog miejsc jest chwilowo niedostępny.' : 'Brak pasujących miejsc.') + '</li>';
   list.scrollTop = scroll;
 }
 
@@ -158,7 +162,7 @@ function renderDeck() {
   el('pick-banner').hidden = !picking;
   el('pick-banner').textContent = picking === 'origin' ? 'Kliknij korytarz lub miejsce, od którego ruszasz.' :
     'Kliknij wejście do miejsca. Pinezka wskoczy na najbliższy korytarz.';
-  const navigating = panel === 'guest';
+  const navigating = panel === 'guest' && !choosingPlace;
   const from = navigating ? origin() : null;
   const step = navigating && !picking && steps[stepIndex]?.point.deck === deck ? steps[stepIndex] : null;
   const current = step?.point;
@@ -167,10 +171,11 @@ function renderDeck() {
     `<span class="current-waypoint" style="${positionStyle(current)}" aria-hidden="true"></span>` : '';
   const markers = catalog.places.filter(place => place.deck === deck).map(place => {
     const category = CATEGORIES[place.category];
-    const target = navigating && place.id === destinationId;
+    const target = (navigating || choosingPlace) && place.id === destinationId;
     const selected = panel === 'admin' && place.id === editingId;
     return `<button type="button" class="map-pin${target ? ' selected' : ''}${selected ? ' active-place' : ''}${place.x > 800 ? ' near-stern' : ''}"
-      data-place="${esc(place.id)}" aria-label="${esc(place.name)}" style="${pinStyle(category)};${positionStyle(place)}">
+      data-place="${esc(place.id)}" aria-label="${esc(place.name)}" ${choosingPlace ? `aria-pressed="${target}"` : ''}
+      style="${pinStyle(category)};${positionStyle(place)}">
       <span aria-hidden="true">${category.mark}</span><span class="pin-label" aria-hidden="true">${esc(place.name)}</span>
     </button>`;
   }).join('');
@@ -187,7 +192,9 @@ function renderRoute() {
   if (panel !== 'guest') return;
   const target = destination();
   if (!route) {
-    card.innerHTML = '<h2 id="route-title">Trasa</h2><p class="route-empty">Wybierz punkt startowy i miejsce docelowe.</p>';
+    card.innerHTML = '<h2 id="route-title">Trasa</h2><p class="route-empty">' +
+      (requestedPlace && !target && catalog.storage !== 'loading' ? 'Wybranego miejsca nie ma w aktualnym katalogu. Wskaż inny cel.' :
+        'Wybierz punkt startowy i miejsce docelowe.') + '</p>';
     return;
   }
   el('map-step-count').textContent = `Krok ${stepIndex + 1} z ${steps.length} · pokład ${steps[stepIndex].point.deck}`;
@@ -312,12 +319,28 @@ function setRoute({announce = false} = {}) {
 }
 
 function setDestination(id, fromMap = false) {
-  if (!placeById(id)) return;
+  const place = placeById(id);
+  if (!place) return;
   destinationId = id;
+  if (choosingPlace) {
+    if (deck !== place.deck) switchDeck(place.deck);
+    else renderDeck();
+    renderMeetingPlace();
+    const focus = fromMap ? el('map-pins') : el('guest-places');
+    focus.querySelector(`[data-place="${CSS.escape(id)}"]`)?.focus({preventScroll: true});
+    return;
+  }
   setRoute({announce: true});
   const focus = fromMap ? viewport : el('guest-places').querySelector(`[data-place="${CSS.escape(id)}"]`);
   focus?.focus({preventScroll: true});
   revealMapOnMobile();
+}
+
+function renderMeetingPlace() {
+  const place = destination();
+  renderGuestPlaces();
+  el('meeting-place').textContent = place ? `${place.name} · pokład ${place.deck}` : 'Wskaż pinezkę lub miejsce z listy.';
+  el('confirm-place').disabled = !place;
 }
 
 function setOrigin(point, id = 'custom') {
@@ -375,11 +398,25 @@ function editPlace(id) {
 
 function applyCatalog(next) {
   catalog = next;
+  if (choosingPlace) {
+    const place = placeById(requestedPlace);
+    if (place) {
+      destinationId = place.id;
+      deck = place.deck;
+    }
+    renderMeetingPlace();
+    renderDeck();
+    return;
+  }
   if (!origin()) originId = placeById('guest-services')?.id ?? catalog.places[0]?.id;
-  if (!destination()) destinationId = placeById('casino-royale')?.id ?? catalog.places.find(place => place.id !== originId)?.id;
+  const requested = placeById(requestedPlace);
+  if (!requestedPlace && !destination()) destinationId = placeById('casino-royale')?.id ?? catalog.places.find(place => place.id !== originId)?.id;
   renderSelects();
   renderStorage();
-  if (panel === 'guest') setRoute();
+  if (panel === 'guest') {
+    setRoute();
+    if (requested) switchDeck(requested.deck);
+  }
   else renderDeck();
 }
 
@@ -388,7 +425,7 @@ const validPlaces = places => Array.isArray(places) && places.every(place =>
   typeof place.description === 'string' && Object.hasOwn(CATEGORIES, place.category));
 
 async function loadCatalog() {
-  let next = {places: DEFAULT_PLACES, storage: 'demo'};
+  let next = choosingPlace ? {places: [], storage: 'unavailable'} : {places: DEFAULT_PLACES, storage: 'demo'};
   try {
     const response = await fetch(api, {cache: 'no-store', signal: AbortSignal.timeout(4500)});
     if (response.ok) {
@@ -398,7 +435,7 @@ async function loadCatalog() {
   } catch {
     // Keep a usable catalog with a local editor if the server is unavailable.
   }
-  if (!next.editable) {
+  if (!choosingPlace && !requestedPlace && !next.editable) {
     try {
       const local = JSON.parse(localStorage.getItem(storageKey));
       if (validPlaces(local)) next = {...next, places: local, storage: 'demo'};
@@ -636,6 +673,9 @@ canvas.addEventListener('click', event => {
   else setDraft(point);
 });
 window.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && choosingPlace) {
+    window.parent.postMessage({type: 'crewconnect-place-cancel'}, location.origin);
+  }
   if (event.key === 'Escape' && picking) {
     picking = null;
     renderDeck();
@@ -648,6 +688,16 @@ el('place-category').innerHTML = Object.entries(CATEGORIES).map(([value, categor
 el('place-deck').innerHTML = DECKS.map(deckOption).join('');
 renderSelects();
 renderStorage();
-setRoute();
+if (choosingPlace) {
+  el('planner-title').textContent = 'Miejsca na statku';
+  el('guest-panel').querySelector('label[for=place-search]').textContent = 'Szukaj miejsca';
+  el('place-confirm').hidden = false;
+  el('confirm-place').addEventListener('click', () => {
+    const place = destination();
+    if (place) window.parent.postMessage({type: 'crewconnect-place-selected', place}, location.origin);
+  });
+  renderMeetingPlace();
+  renderDeck();
+} else setRoute();
 void loadCatalog();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
