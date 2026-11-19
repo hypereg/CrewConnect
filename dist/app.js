@@ -599,15 +599,18 @@ function render() {
   const profile = page === 'profil';
   const administration = page === 'administracja';
   const restaurants = page === 'restauracje';
+  const statistics = page === 'statystyki';
   const map = page === 'mapa';
   content.classList.toggle('map-content', map);
   document.querySelectorAll('[data-page]').forEach(link => {
-    if (link.dataset.page === (calendar || reports || discover || profile || map || administration || restaurants ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
+    if (link.dataset.page === (calendar || reports || discover || profile || map || administration || restaurants || statistics ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
   activatePersonalProfile();
   updateNetwork();
-  if (restaurants) {
+  if (statistics) {
+    content.innerHTML = renderShipStatistics();
+  } else if (restaurants) {
     content.innerHTML = renderRestaurants();
   } else if (administration) {
     content.innerHTML = renderUserAdministration();
@@ -723,6 +726,7 @@ function resetProfileSession() {
   onlineError = '';
   skippedOnline.clear();
   restaurantBoard = undefined;
+  shipStatistics = undefined;
   state = {member: '', events: [], reports: []};
   render();
 }
@@ -1003,6 +1007,10 @@ content.addEventListener('click', e => {
   const button = e.target.closest('button[data-action]');
   if (!button) return;
   const {action, id} = button.dataset;
+  if (action === 'statistics-refresh') {
+    void loadShipStatistics();
+    return;
+  }
   if (action.startsWith('restaurant-')) {
     void handleRestaurantAction(action, id);
     return;
@@ -1190,6 +1198,7 @@ content.addEventListener('toggle', event => {
 function refreshPage() {
   render();
   if (location.hash === '#restauracje') void loadRestaurants();
+  if (location.hash === '#statystyki') void loadShipStatistics();
   void refreshDiscovery();
   if (isDutyPage() && state.userProfile) void loadDuties();
 }
@@ -1242,6 +1251,7 @@ window.addEventListener('online', refreshDiscovery);
 setInterval(() => { if (!document.hidden) void refreshDiscovery(); }, 3000);
 window.addEventListener('online', refreshEvents);
 window.addEventListener('online', loadRestaurants);
+window.addEventListener('online', loadShipStatistics);
 setInterval(() => { if (!document.hidden) void refreshEvents(); }, 15000);
 
 const mobileMenu = document.querySelector('.mobile-menu-toggle');
