@@ -13,6 +13,7 @@ const secret = env.DEMO_SESSION_SECRET || randomBytes(32);
 const cookieName = 'crew_social_session';
 const loginCookieName = 'crew_social_login';
 const loginCodeSeconds = 600;
+const demoCabinCode = '123456';
 const ttl = 7 * 86400;
 const categories = ['Gry', 'Trening', 'Integracja', 'Inne'];
 const admin = {id: 'admin', email: adminEmail, name: 'Administrator', role: 'admin', active: true};
@@ -250,9 +251,13 @@ function register(state, body, signedIn) {
   const address = email(body.email);
   const name = text(body.name, 60, 'Nazwa wyświetlana');
   const {voyage, cabin} = invitation(state, body.token, false);
-  let user = state.accounts.find(person => person.email === address);
+  const user = state.accounts.find(person => person.email === address);
   if (address === admin.email || (user && user.role !== 'guest')) fail(409, 'Użyj innego testowego adresu e-mail.');
   if (user && signedIn?.id !== user.id) fail(409, 'Masz już konto z tym adresem. Zaloguj się, aby dołączyć z zaproszenia.');
+  return assignCabin(state, user, address, name, voyage, cabin);
+}
+
+function assignCabin(state, user, address, name, voyage, cabin) {
   const current = membership(user, voyage);
   if (current?.cabinId === cabin.id) return user.id;
   if (current) fail(409, 'To konto jest przypisane do innej kabiny.');
@@ -263,6 +268,20 @@ function register(state, body, signedIn) {
   }
   user.memberships.push({voyageId: voyage.id, cabinId: cabin.id});
   return user.id;
+}
+
+function joinDemoCabin(state, body, signedIn) {
+  if (!equal(body.code, demoCabinCode)) fail(401, 'Wpisz kod demo 123456.');
+  if (signedIn && signedIn.role !== 'guest') fail(403, 'Kod demo służy do dołączania gości.');
+  const address = signedIn?.email ?? email(body.email);
+  if (!signedIn && accountByEmail(state, address)) fail(409, 'Ten e-mail ma już konto. Zaloguj się własnym kodem.');
+  const voyage = activeVoyage(state);
+  if (!voyage) fail(409, 'Kod demo wymaga aktywnego rejsu.');
+  if (membership(signedIn, voyage)) return signedIn.id;
+  const cabin = state.cabins.find(item => item.voyageId === voyage.id && peopleIn(state, item) < item.capacity);
+  if (!cabin) fail(409, 'W aktywnym rejsie nie ma wolnego miejsca w kabinach.');
+  const name = 'Gość ' + cabin.label + ' (' + (peopleIn(state, cabin) + 1) + ')';
+  return assignCabin(state, signedIn, address, name, voyage, cabin);
 }
 
 function adminAction(state, body, voyage, origin) {
@@ -484,7 +503,8 @@ export default async function social(req, res) {
     if (body?.action === 'requestLoginCode') {
       const address = email(body.email);
       const user = accountByEmail(await store.read(), address);
-      if (!user?.active) fail(404, 'Użyj e-maila podanego przy rejestracji z zaproszenia.');
+      if (!user) return send(200, {demoSignup: true});
+      if (!user.active) fail(404, 'To konto jest niedostępne.');
       if (staff(user)) return send(200, {requiresAccessCode: true});
       const token = loginBrowser(req) || randomBytes(24).toString('base64url');
       const code = String(randomInt(1_000_000)).padStart(6, '0');
@@ -492,9 +512,10 @@ export default async function social(req, res) {
       res.setHeader('Set-Cookie', cookie(loginCookieName, token, '/api/social', loginCodeSeconds));
       return send(200, {code});
     }
-    if (body?.action === 'login' || body?.action === 'register') {
+    if (['login', 'register', 'joinDemoCabin'].includes(body?.action)) {
+      const assign = body.action === 'register' ? register : joinDemoCabin;
       const id = body.action === 'login' ? await login(req, await store.read(), body) :
-        await store.change(state => register(state, body, session(req, state)));
+        await store.change(state => assign(state, body, session(req, state)));
       const state = await store.read();
       const account = id === admin.id ? admin : state.accounts.find(item => item.id === id && item.active);
       setSession(res, account);
