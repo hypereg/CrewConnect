@@ -217,13 +217,15 @@ function eventCard(event) {
   </article>`;
 }
 
-function profileDetails(profile, sharedInterests = []) {
+const profileName = profile => escape(profile.name) + (profile.age ? `, ${escape(profile.age)}` : '');
+
+function profileDetails(profile, sharedInterests = [], showName = true) {
   const intent = datingIntents[profileIntent(profile)];
   const tags = profile.interests.map(interest => {
     const common = sharedInterests.includes(interestKey(interest));
     return `<span${common ? ' class="common-interest"' : ''}>${common ? '✓ ' : ''}${escape(interest)}</span>`;
   }).join('');
-  return `<h2>${escape(profile.name)}${profile.age ? `, ${escape(profile.age)}` : ''}</h2>
+  return `${showName ? `<h2>${profileName(profile)}</h2>` : ''}
     ${profile.role ? `<p class="muted">${escape(profile.role)}</p>` : ''}
     ${profile.bio ? `<p class="profile-bio">${escape(profile.bio)}</p>` : ''}
     ${intent ? `<p class="profile-intent">Szukam: <strong>${intent}</strong></p>` : ''}
@@ -233,19 +235,16 @@ function profileDetails(profile, sharedInterests = []) {
 
 function renderUserProfile() {
   const profile = state.userProfile;
-  return `<header class="crew-heading"><h1>Mój profil</h1></header>
-    <article class="card profile-card">
-      <div class="crew-portrait teal"><span aria-hidden="true">${profile ? escape(initials(profile.name)) : '◇'}</span></div>
-      <div class="crew-details">
-        ${profile ? profileDetails(profile) : '<h2>Przedstaw się innym</h2><p class="muted">Wybierz nazwę i dodaj kilka słów o sobie.</p>'}
-        <footer>
-          <button class="primary" data-action="profile-edit">${profile ? 'Edytuj profil' : 'Utwórz profil'}</button>
-          ${apiBase ? '' : profile ? '<button class="secondary" data-action="profile-logout">Wyloguj się</button>' :
-            '<button class="secondary" data-action="profile-login">Zaloguj się</button>'}
-        </footer>
-      </div>
-    </article>
-    <p class="muted profile-note">Tego profilu używasz przy aktywnościach, rezerwacjach i w „Poznaj ludzi”. Po opublikowaniu zmiany z tego formularza pojawiają się też na Twojej karcie.</p>`;
+  const details = profile ? profileDetails(profile, [], false) : '<p class="muted">Wybierz nazwę i dodaj kilka słów o sobie.</p>';
+  return renderMyProfile({
+    name: profile ? profileName(profile) : 'Przedstaw się innym',
+    avatar: profile ? escape(initials(profile.name)) : '',
+    details: `${details}<p class="muted">Tego profilu używasz przy aktywnościach, rezerwacjach i w „Poznaj ludzi”. Po opublikowaniu zmiany z tego formularza pojawiają się też na Twojej karcie.</p>`,
+    actions: `<button class="primary" data-action="profile-edit">${profile ? 'Edytuj profil' : 'Utwórz profil'}</button>
+      ${apiBase ? '' : profile ? '<button class="secondary" data-action="profile-logout">Wyloguj się</button>' :
+        '<button class="secondary" data-action="profile-login">Zaloguj się</button>'}`,
+    administrationHref: adminKey ? '#administracja' : ''
+  });
 }
 
 let onlineDiscovery;
@@ -591,6 +590,7 @@ function chooseCrewProfile(profile, choice) {
 }
 
 function render() {
+  if (location.hash === '#konto') history.replaceState(null, '', '#profil');
   const page = location.hash.slice(1);
   const reports = isDutyPage(page);
   document.body.classList.toggle('on-duties', reports);
@@ -601,9 +601,11 @@ function render() {
   const restaurants = page === 'restauracje';
   const statistics = page === 'statystyki';
   const map = page === 'mapa';
+  const activePage = administration ? 'profil' :
+    (calendar || reports || discover || profile || map || restaurants || statistics ? page : 'aktywnosci');
   content.classList.toggle('map-content', map);
   document.querySelectorAll('[data-page]').forEach(link => {
-    if (link.dataset.page === (calendar || reports || discover || profile || map || administration || restaurants || statistics ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
+    if (link.dataset.page === activePage) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
   activatePersonalProfile();
@@ -719,6 +721,7 @@ function resetProfileSession() {
   localStorage.removeItem(pendingKey);
   localStorage.removeItem(tokenKey);
   clearDutySession();
+  lockUserAdministration();
   schedule = null;
   scheduleError = null;
   onlineDiscovery = undefined;
@@ -794,6 +797,12 @@ let adminKey = '';
 let adminUsers = [];
 let newUserCode = '';
 
+function lockUserAdministration() {
+  adminKey = '';
+  adminUsers = [];
+  newUserCode = '';
+}
+
 async function adminRequest(payload, key = adminKey) {
   const response = await fetch('api/users', {
     method: payload ? 'POST' : 'GET',
@@ -851,9 +860,7 @@ async function handleUserAdministration(action, id) {
     return;
   }
   if (action === 'admin-lock') {
-    adminKey = '';
-    adminUsers = [];
-    newUserCode = '';
+    lockUserAdministration();
     render();
     return;
   }
