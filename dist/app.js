@@ -1,26 +1,29 @@
 const crewProfiles = [
-  {name: 'Marek Nowak', role: 'Marynarz pokładowy', initials: 'MN', color: 'teal',
+  {name: 'Marek Nowak', gender: 'men', role: 'Marynarz pokładowy', initials: 'MN', color: 'teal',
     bio: 'Chętnie zagram mecz FIFA albo zorganizuję wieczór z planszówkami.', interests: ['FIFA', 'Planszówki']},
-  {name: 'Anna Kowalska', role: 'Oficer wachtowy', initials: 'AK', color: 'plum',
+  {name: 'Anna Kowalska', gender: 'women', role: 'Oficer wachtowy', initials: 'AK', color: 'plum',
     bio: 'Szukam towarzystwa do wspólnych treningów i rozmów przy kawie.', interests: ['Trening', 'Kawa']},
-  {name: 'Piotr Zieliński', role: 'Mechanik', initials: 'PZ', color: 'blue',
+  {name: 'Piotr Zieliński', gender: 'men', role: 'Mechanik', initials: 'PZ', color: 'blue',
     bio: 'Po wachcie najchętniej oglądam filmy albo gram w szachy.', interests: ['Filmy', 'Szachy']},
-  {name: 'Julia Wójcik', role: 'Oficer nawigacyjny', initials: 'JW', color: 'blue',
+  {name: 'Julia Wójcik', gender: 'women', role: 'Oficer nawigacyjny', initials: 'JW', color: 'blue',
     bio: 'Lubię fotografować wschody słońca i dzielić się zdjęciami z rejsu.', interests: ['Fotografia', 'Podróże']},
-  {name: 'Tomasz Lewandowski', role: 'Bosman', initials: 'TL', color: 'teal',
+  {name: 'Tomasz Lewandowski', gender: 'men', role: 'Bosman', initials: 'TL', color: 'teal',
     bio: 'Po pracy chętnie rozgrywam kilka partii w ping-ponga.', interests: ['Tenis stołowy', 'Quizy']},
-  {name: 'Natalia Mazur', role: 'Elektryk okrętowy', initials: 'NM', color: 'plum',
+  {name: 'Natalia Mazur', gender: 'women', role: 'Elektryk okrętowy', initials: 'NM', color: 'plum',
     bio: 'Mam słabość do kryminałów i chętnie wymienię się książkami.', interests: ['Książki', 'Podcasty']},
-  {name: 'Oskar Kamiński', role: 'Kucharz okrętowy', initials: 'OK', color: 'teal',
+  {name: 'Oskar Kamiński', gender: 'men', role: 'Kucharz okrętowy', initials: 'OK', color: 'teal',
     bio: 'Chętnie wymienię się przepisami albo pogram na gitarze po kolacji.', interests: ['Gotowanie', 'Gitara']},
-  {name: 'Karolina Lis', role: 'Marynarz pokładowy', initials: 'KL', color: 'blue',
+  {name: 'Karolina Lis', gender: 'women', role: 'Marynarz pokładowy', initials: 'KL', color: 'blue',
     bio: 'Szukam ekipy do porannej rozgrzewki i wspólnego oglądania meczów.', interests: ['Fitness', 'Piłka nożna']},
-  {name: 'Michał Dąbrowski', role: 'Mechanik wachtowy', initials: 'MD', color: 'plum',
+  {name: 'Michał Dąbrowski', gender: 'men', role: 'Mechanik wachtowy', initials: 'MD', color: 'plum',
     bio: 'Najchętniej spędzam wolny wieczór przy grze kooperacyjnej.', interests: ['Gry kooperacyjne', 'Łamigłówki']},
-  {name: 'Zofia Król', role: 'Kadetka pokładowa', initials: 'ZK', color: 'teal',
+  {name: 'Zofia Król', gender: 'women', role: 'Kadetka pokładowa', initials: 'ZK', color: 'teal',
     bio: 'Uczę się hiszpańskiego i chętnie poćwiczę konwersację przy herbacie.', interests: ['Hiszpański', 'Herbata']}
 ];
 const crew = crewProfiles.map(profile => profile.name);
+const genderFilters = {all: 'Wszystkich', women: 'Kobiety', men: 'Mężczyzn'};
+const preferredGender = () => state.crewPreferences?.[state.member] ?? 'all';
+const matchesPreference = profile => preferredGender() === 'all' || profile.gender === preferredGender();
 const storageKey = 'crewconnect-v1';
 const dateValue = (offset = 0) => {
   const date = new Date();
@@ -141,7 +144,8 @@ function renderCrew() {
   const others = crewProfiles.filter(profile => profile.name !== state.member);
   const matches = others.filter(profile => choices[profile.name] === 'connect' &&
     state.crewChoices?.[profile.name]?.[state.member] === 'connect');
-  const candidate = others.find(profile => !choices[profile.name]);
+  const visibleProfiles = others.filter(matchesPreference);
+  const candidate = visibleProfiles.find(profile => !choices[profile.name]);
   const card = candidate ? `
     <article class="crew-card" id="crew-card" data-profile="${escape(candidate.name)}">
       <div class="crew-portrait ${candidate.color}"><span aria-hidden="true">${candidate.initials}</span></div>
@@ -157,9 +161,13 @@ function renderCrew() {
       <button class="primary" data-action="crew-connect" data-profile="${escape(candidate.name)}">Chcę poznać</button>
     </div>
     <p class="crew-hint muted">Przesuń kartę w lewo, aby pominąć, lub w prawo, aby poznać.</p>` : `
-    <div class="card crew-empty"><h2>Wszystkie karty przejrzane</h2>
-    ${Object.values(choices).includes('skip') ? '<button class="secondary" data-action="crew-revisit">Pokaż pominięte osoby</button>' : ''}</div>`;
+    <div class="card crew-empty"><h2>Brak nowych kart w tym widoku</h2>
+    ${visibleProfiles.some(profile => choices[profile.name] === 'skip') ? '<button class="secondary" data-action="crew-revisit">Pokaż pominięte osoby</button>' : ''}</div>`;
   return `<header class="crew-heading"><h1>Poznaj załogę</h1><p class="muted">Znajdź osoby, z którymi chcesz spędzić czas po wachcie.</p></header>
+    <div class="crew-filter"><label for="crew-gender">Kogo chcesz poznawać?</label>
+      <select id="crew-gender">${Object.entries(genderFilters).map(([value, label]) =>
+        `<option value="${value}" ${preferredGender() === value ? 'selected' : ''}>${label}</option>`).join('')}</select>
+    </div>
     <div class="crew-layout"><section aria-label="Profile załogi">${card}</section>
       <aside class="card crew-matches"><h2>Dopasowania</h2>
         ${matches.length ? matches.map(profile => `<div class="crew-match">
@@ -321,8 +329,8 @@ content.addEventListener('click', e => {
   }
   if (action === 'crew-revisit') {
     const choices = state.crewChoices[state.member];
-    for (const name of Object.keys(choices)) {
-      if (choices[name] === 'skip') delete choices[name];
+    for (const profile of crewProfiles.filter(matchesPreference)) {
+      if (choices[profile.name] === 'skip') delete choices[profile.name];
     }
     save('Ponownie wyświetlono pominięte profile.');
     content.querySelector('[data-action="crew-skip"]')?.focus();
@@ -381,6 +389,14 @@ function finishSwipe(event) {
 content.addEventListener('pointerup', finishSwipe);
 content.addEventListener('pointercancel', finishSwipe);
 content.addEventListener('lostpointercapture', finishSwipe);
+
+content.addEventListener('change', event => {
+  if (event.target.id !== 'crew-gender' || !Object.keys(genderFilters).includes(event.target.value)) return;
+  if (!state.crewPreferences) state.crewPreferences = {};
+  state.crewPreferences[state.member] = event.target.value;
+  save('Zapisano preferencję profilu.');
+  content.querySelector('#crew-gender')?.focus();
+});
 
 member.addEventListener('change', () => {
   state.member = member.value;
