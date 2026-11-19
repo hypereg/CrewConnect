@@ -326,7 +326,8 @@ async function refreshDiscovery() {
 }
 
 function renderOnlineDiscovery() {
-  const heading = '<header class="crew-heading"><h1>Poznaj załogę online</h1></header>';
+  const heading = '<header class="crew-heading"><h1>Poznaj załogę online</h1>' +
+    '<button class="secondary" data-action="online-reset">Usuń historię dopasowań</button></header>';
   const error = onlineError ? `<p class="form-error" role="status">${escape(onlineError)}</p>` : '';
   if (!onlineDiscovery) return heading + (error || '<p>Ładowanie profili online…</p>');
   if (!onlineDiscovery.published) return heading + `<div class="card"><h2>Opublikuj swój profil</h2>
@@ -358,7 +359,6 @@ function renderOnlineDiscovery() {
     </div><div class="crew-filter">
     <button class="secondary" data-action="online-publish">Zaktualizuj profil online</button>
     <button class="secondary" data-action="online-hide">Ukryj profil online</button>
-    <button class="secondary" data-action="online-reset">Usuń historię dopasowań</button>
     ${skippedOnline.size ? '<button class="secondary" data-action="online-revisit">Pokaż pominięte</button>' : ''}
     </div><div class="crew-layout"><section aria-label="Profile online">${card}</section>
     <aside class="card crew-matches"><h2>Dopasowania online</h2>${matches.map(profile => `<div class="crew-match">
@@ -402,7 +402,8 @@ function renderCrew() {
     <p class="crew-hint muted">Przesuń kartę w lewo, aby pominąć, lub w prawo, aby poznać.</p>` : `
     <div class="card crew-empty"><h2>Brak nowych kart w tym widoku</h2>
     ${visibleProfiles.some(profile => choices[profileId(profile)] === 'skip') ? '<button class="secondary" data-action="crew-revisit">Pokaż pominięte osoby</button>' : ''}</div>`;
-  return `<header class="crew-heading"><h1>Poznaj załogę</h1><p class="muted">Znajdź osoby, z którymi chcesz spędzić czas po wachcie.</p></header>
+  return `<header class="crew-heading"><h1>Poznaj załogę</h1><p class="muted">Znajdź osoby, z którymi chcesz spędzić czas po wachcie.</p>
+    <button class="secondary" data-action="demo-reset">Usuń historię dopasowań</button></header>
     <div class="crew-filter"><label for="crew-gender">Kogo chcesz poznawać?</label>
       <select id="crew-gender">${Object.entries(genderFilters).map(([value, label]) =>
         `<option value="${value}" ${preferredGender() === value ? 'selected' : ''}>${label}</option>`).join('')}</select>
@@ -759,6 +760,14 @@ content.addEventListener('click', e => {
   }
   if (action === 'online-hide' && personalDiscovery()) {
     void updateOnlineDiscovery({action: 'hide'}, 'Profil ukryty.');
+    return;
+  }
+  if (action === 'demo-reset' && !personalDiscovery()) {
+    if (window.confirm('Usunąć polubienia, pominięcia i dopasowania aktywnego profilu demo? Wiadomości zostaną zachowane.')) {
+      delete state.crewConnections?.[state.member];
+      save('Usunięto historię dopasowań profilu demo.');
+      content.querySelector('[data-action="demo-reset"]')?.focus();
+    }
     return;
   }
   if (action === 'online-reset' && personalDiscovery()) {
