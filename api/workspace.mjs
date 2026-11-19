@@ -19,6 +19,8 @@ function validProfile(profile) {
     !/\p{Cc}/u.test(profile.name) &&
     typeof profile.role === 'string' && profile.role.length <= 60 &&
     typeof profile.bio === 'string' && profile.bio.length <= 300 &&
+    (profile.intent === undefined || ['', 'dates', 'relationship', 'friendship', 'activities'].includes(profile.intent)) &&
+    (profile.icebreaker === undefined || (typeof profile.icebreaker === 'string' && profile.icebreaker.length <= 120)) &&
     Array.isArray(profile.interests) && profile.interests.length <= 6 &&
     profile.interests.every(interest => typeof interest === 'string' && interest.trim() && interest.length <= 28);
 }

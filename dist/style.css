@@ -161,3 +161,6 @@
 }
 .calendar-event.proposed{background:#e3edf5;color:#324e66}
 @media(max-width:540px){.calendar-event.proposed{background:#7894ad;color:transparent}}
+
+.crew-interests .common-interest{background:#dbf5ed;color:#15584c;font-weight:700}
+.crew-details .profile-intent{font-size:14px;color:#324e66}

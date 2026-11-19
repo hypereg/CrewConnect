@@ -23,6 +23,16 @@ const crewProfiles = [
 ];
 const crew = crewProfiles.map(profile => profile.name);
 const genderFilters = {all: 'Wszystkich', women: 'Kobiety', men: 'Mężczyzn'};
+const datingIntents = {dates: 'Randki', relationship: 'Związek', friendship: 'Znajomości', activities: 'Wspólne aktywności'};
+const interestKey = interest => interest.trim().toLocaleLowerCase('pl');
+const discoveryFilters = () => state.discoveryFilters?.[state.member] ?? {};
+const demoIntents = Object.keys(datingIntents);
+const profileIntent = profile => profile.intent || (profile.id ? '' : demoIntents[crewProfiles.indexOf(profile) % demoIntents.length]);
+function matchesDiscoveryFilters(profile) {
+  const {intent, interest} = discoveryFilters();
+  return matchesPreference(profile) && (!intent || profileIntent(profile) === intent) &&
+    (!interest || profile.interests.some(item => interestKey(item) === interest));
+}
 const preferredGender = () => state.crewPreferences?.[state.member] ?? 'all';
 const matchesPreference = profile => preferredGender() === 'all' || profile.gender === preferredGender();
 const storageKey = 'crewconnect-v1';
@@ -243,11 +253,18 @@ function eventCard(event) {
   </article>`;
 }
 
-function profileDetails(profile) {
+function profileDetails(profile, sharedInterests = []) {
+  const intent = datingIntents[profileIntent(profile)];
+  const tags = profile.interests.map(interest => {
+    const common = sharedInterests.includes(interestKey(interest));
+    return `<span${common ? ' class="common-interest"' : ''}>${common ? '✓ ' : ''}${escape(interest)}</span>`;
+  }).join('');
   return `<h2>${escape(profile.name)}</h2>
     ${profile.role ? `<p class="muted">${escape(profile.role)}</p>` : ''}
     ${profile.bio ? `<p class="profile-bio">${escape(profile.bio)}</p>` : ''}
-    ${profile.interests.length ? `<div class="crew-interests">${profile.interests.map(interest => `<span>${escape(interest)}</span>`).join('')}</div>` : ''}`;
+    ${intent ? `<p class="profile-intent">Szukam: <strong>${intent}</strong></p>` : ''}
+    ${tags ? `<div class="crew-interests">${tags}</div>` : ''}
+    ${profile.icebreaker ? `<p class="note"><strong>Zacznijmy od pytania</strong><br>${escape(profile.icebreaker)}</p>` : ''}`;
 }
 
 function renderUserProfile() {
@@ -272,12 +289,18 @@ function renderCrew() {
   const others = currentRoster().filter(profile => profileId(profile) !== state.member);
   const matches = others.filter(profile => choices[profileId(profile)] === 'connect' &&
     state.crewChoices?.[profileId(profile)]?.[state.member] === 'connect');
-  const visibleProfiles = others.filter(matchesPreference);
-  const candidate = visibleProfiles.find(profile => !choices[profileId(profile)]);
+  const visibleProfiles = others.filter(matchesDiscoveryFilters);
+  const myInterests = currentRoster().find(profile => profileId(profile) === state.member)?.interests ?? [];
+  const shared = profile => profile.interests.map(interestKey).filter(interest => myInterests.some(item => interestKey(item) === interest));
+  const available = visibleProfiles.filter(profile => !choices[profileId(profile)]);
+  const candidate = available.sort((a, b) => shared(b).length - shared(a).length)[0];
+  const interestOptions = new Map(others.flatMap(profile => profile.interests.map(item => [interestKey(item), item])));
+  const filters = discoveryFilters();
+  const option = (value, label, selected) => `<option value="${escape(value)}" ${value === selected ? 'selected' : ''}>${escape(label)}</option>`;
   const card = candidate ? `
     <article class="crew-card" id="crew-card" data-profile="${escape(profileId(candidate))}">
       <div class="crew-portrait ${candidate.color}"><span aria-hidden="true">${escape(candidate.initials)}</span></div>
-      <div class="crew-details">${profileDetails(candidate)}</div>
+      <div class="crew-details">${profileDetails(candidate, shared(candidate))}</div>
     </article>
     <div class="crew-actions">
       <button class="secondary" data-action="crew-skip" data-profile="${escape(profileId(candidate))}">Pomiń</button>
@@ -290,6 +313,14 @@ function renderCrew() {
     <div class="crew-filter"><label for="crew-gender">Kogo chcesz poznawać?</label>
       <select id="crew-gender">${Object.entries(genderFilters).map(([value, label]) =>
         `<option value="${value}" ${preferredGender() === value ? 'selected' : ''}>${label}</option>`).join('')}</select>
+      <label for="crew-intent">Intencje</label><select id="crew-intent">
+        <option value="">Dowolne</option>
+        ${Object.entries(datingIntents).map(([value, label]) => option(value, label, filters.intent)).join('')}
+      </select>
+      <label for="crew-interest">Zainteresowanie</label><select id="crew-interest">
+        <option value="">Dowolne</option>
+        ${[...interestOptions].sort((a, b) => a[1].localeCompare(b[1], 'pl')).map(([value, label]) => option(value, label, filters.interest)).join('')}
+      </select>
     </div>
     <div class="crew-layout"><section aria-label="Profile załogi">${card}</section>
       <aside class="card crew-matches"><h2>Dopasowania</h2>
@@ -388,7 +419,11 @@ function editUserProfile() {
     <label>Rola na pokładzie <input name="role" maxlength="60" value="${escape(profile?.role ?? '')}"></label>
     <label>O mnie <textarea name="bio" rows="3" maxlength="300">${escape(profile?.bio ?? '')}</textarea></label>
     <label>Zainteresowania <input name="interests" maxlength="180" aria-describedby="interests-hint" value="${escape(profile?.interests.join(', ') ?? '')}"></label>
-    <small id="interests-hint" class="muted">Do 6 zainteresowań oddzielonych przecinkami.</small>`, 'Zapisz profil', (data, form) => {
+    <small id="interests-hint" class="muted">Do 6 zainteresowań oddzielonych przecinkami.</small>
+    <label>Czego szukasz? <select name="intent"><option value="">Wybierz opcjonalnie</option>
+      ${Object.entries(datingIntents).map(([value, label]) => `<option value="${value}" ${profile?.intent === value ? 'selected' : ''}>${label}</option>`).join('')}
+    </select></label>
+    <label>Pytanie na przełamanie lodów <input name="icebreaker" maxlength="120" placeholder="Np. Jaki port chcesz odwiedzić ponownie?" value="${escape(profile?.icebreaker ?? '')}"></label>`, 'Zapisz profil', (data, form) => {
     const name = data.get('displayName').trim().replace(/\s+/gu, ' ');
     const role = data.get('role').trim();
     const bio = data.get('bio').trim();
@@ -403,7 +438,8 @@ function editUserProfile() {
     }
     const existing = state.userProfile;
     const id = existing?.id ?? 'profile-' + crypto.randomUUID();
-    state.userProfile = {id, name, role, bio, interests};
+    state.userProfile = {id, name, role, bio, interests, intent: data.get('intent'),
+      icebreaker: data.get('icebreaker').trim()};
     if (!existing) state.member = id;
     save('Zapisano profil.');
   });
@@ -496,7 +532,7 @@ content.addEventListener('click', e => {
   }
   if (action === 'crew-revisit') {
     const choices = state.crewChoices[state.member];
-    for (const profile of currentRoster().filter(matchesPreference)) {
+    for (const profile of currentRoster().filter(matchesDiscoveryFilters)) {
       const key = profileId(profile);
       if (choices[key] === 'skip') delete choices[key];
     }
@@ -567,6 +603,15 @@ content.addEventListener('lostpointercapture', finishSwipe);
 content.addEventListener('change', event => {
   if (event.target.id === 'duty-profile') {
     changeDutyProfile(event.target.value);
+    return;
+  }
+  const {id, value} = event.target;
+  if (id === 'crew-intent' || id === 'crew-interest') {
+    if (!state.discoveryFilters) state.discoveryFilters = {};
+    const key = id === 'crew-intent' ? 'intent' : 'interest';
+    state.discoveryFilters[state.member] = {...discoveryFilters(), [key]: value};
+    save();
+    content.querySelector('#' + id)?.focus();
     return;
   }
   if (event.target.id !== 'crew-gender' || !Object.keys(genderFilters).includes(event.target.value)) return;
