@@ -3,8 +3,11 @@ const storageKey = 'crewconnect-v1';
 const dateValue = (offset = 0) => {
   const date = new Date();
   date.setDate(date.getDate() + offset);
-  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+  return calendarDate(date);
 };
+function calendarDate(date) {
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+}
 const initial = {
   member: crew[0],
   events: [{
@@ -35,7 +38,53 @@ const participants = event => Object.keys(event.votes);
 const sharedSlots = event => participants(event).length < 2 ? [] : event.slots.filter(
   (_, index) => Object.values(event.votes).every(vote => vote.includes(index))
 ).sort();
-const otherPage = () => location.hash === '#raporty';
+let selectedDay = dateValue();
+let visibleMonth = selectedDay.slice(0, 7);
+const monthLabel = new Intl.DateTimeFormat('pl-PL', {month: 'long', year: 'numeric'});
+const dayLabel = new Intl.DateTimeFormat('pl-PL', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
+
+function renderCalendar() {
+  const first = new Date(visibleMonth + '-01T12:00');
+  const start = new Date(first);
+  start.setDate(1 - (first.getDay() + 6) % 7);
+  const scheduled = state.events.flatMap(event => {
+    const [slot] = sharedSlots(event);
+    return slot ? [{event, slot}] : [];
+  }).sort((a, b) => a.slot.localeCompare(b.slot));
+  const eventsOn = day => scheduled.filter(item => item.slot.slice(0, 10) === day);
+  const today = dateValue();
+  const cells = Array.from({length: 42}, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    const day = calendarDate(date);
+    const items = eventsOn(day);
+    return `<button class="calendar-day ${day.startsWith(visibleMonth) ? '' : 'outside'}" data-action="calendar-day" data-day="${day}"
+      aria-label="${dayLabel.format(date)}, wydarzenia: ${items.length}" aria-pressed="${day === selectedDay}" ${day === today ? 'aria-current="date"' : ''}>
+      <span class="day-number">${date.getDate()}</span>
+      ${items.slice(0, 2).map(({event, slot}) => `<span class="calendar-event">${slot.slice(11, 16)} ${escape(event.title)}</span>`).join('')}
+      ${items.length > 2 ? `<span class="calendar-more">+${items.length - 2}</span>` : ''}
+    </button>`;
+  }).join('');
+  const agenda = eventsOn(selectedDay).map(({event, slot}) => `
+    <article class="agenda-item"><time datetime="${slot}">${slot.slice(11, 16)}</time>
+      <div><h3>${escape(event.title)}</h3><p class="muted">${escape(event.type)} · ${escape(event.owner)}</p></div>
+      <button class="secondary" data-action="vote" data-id="${event.id}">${event.votes[state.member] ? 'Zmień dostępność' : 'Zapisz się'}</button>
+    </article>`).join('');
+  return `<section class="calendar" aria-labelledby="calendar-title">
+    <header class="calendar-header"><div><h1 id="calendar-title">Kalendarz</h1><h2>${monthLabel.format(first)}</h2></div>
+      <div class="calendar-controls">
+        <button class="secondary" data-action="calendar-today">Dzisiaj</button>
+        <button class="secondary" data-action="calendar-prev" aria-label="Poprzedni miesiąc">‹</button>
+        <button class="secondary" data-action="calendar-next" aria-label="Następny miesiąc">›</button>
+      </div>
+    </header>
+    <div class="calendar-grid">${['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'].map(day => `<span class="weekday">${day}</span>`).join('')}${cells}</div>
+  </section>
+  <section class="card agenda"><header><h2>${dayLabel.format(new Date(selectedDay + 'T12:00'))}</h2>
+    <button class="primary" data-action="event" data-day="${selectedDay}">+ Nowa aktywność</button></header>
+    ${agenda || '<p class="muted">Tego dnia nie ma uzgodnionych aktywności.</p>'}
+  </section>`;
+}
 const stat = (count, label) => `<div class="stat"><b>${count}</b><span>${label}</span></div>`;
 const title = (eyebrow, heading, description, action, label) => `
   <section class="hero"><div><span class="eyebrow">${eyebrow}</span><h1>${heading}</h1><p>${description}</p></div>
@@ -59,13 +108,17 @@ function eventCard(event) {
 }
 
 function render() {
-  const reports = otherPage();
+  const page = location.hash.slice(1);
+  const reports = page === 'raporty';
+  const calendar = page === 'kalendarz';
   document.querySelectorAll('[data-page]').forEach(link => {
-    if (link.dataset.page === (reports ? 'raporty' : 'aktywnosci')) link.setAttribute('aria-current', 'page');
+    if (link.dataset.page === (calendar || reports ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
   member.value = state.member;
-  if (reports) {
+  if (calendar) {
+    content.innerHTML = renderCalendar();
+  } else if (reports) {
     const ordered = [...state.reports].sort((a, b) => b.date.localeCompare(a.date));
     content.innerHTML = title('Dziennik pokładowy', 'Raporty obowiązków', 'Zapisuj wykonane zadania i zgłaszaj, co wymaga dalszej pracy.', 'report', 'Dodaj raport') +
       `<div class="stats">${stat(ordered.length, 'Wszystkie raporty')}${stat(ordered.filter(report => report.status === 'Wykonano').length, 'Wykonane')}${stat(ordered.filter(report => report.status === 'Wymaga uwagi').length, 'Wymagają uwagi')}</div>
@@ -102,12 +155,13 @@ function openForm(name, fields, submitLabel, onSubmit) {
   dialog.showModal();
 }
 
-function createEvent() {
+function createEvent(day) {
+  const preferredTime = day && new Date(day + 'T18:00') > new Date() ? day + 'T18:00' : '';
   openForm('Nowa aktywność', `
     <label>Nazwa <input name="title" maxlength="90" required></label>
     <label>Kategoria <select name="type"><option>Gry</option><option>Trening</option><option>Integracja</option><option>Inne</option></select></label>
     <label>Opis <textarea name="description" maxlength="500"></textarea></label>
-    <label>Pierwszy termin <input type="datetime-local" name="slot" required></label>
+    <label>Pierwszy termin <input type="datetime-local" name="slot" value="${preferredTime}" required></label>
     <label>Drugi termin <input type="datetime-local" name="slot" required></label>
     <label>Trzeci termin (opcjonalnie) <input type="datetime-local" name="slot"></label>
     <p class="muted">Jako organizator deklarujesz dostępność w proponowanych terminach. Możesz ją później zmienić.</p>`, 'Utwórz aktywność', (data, form) => {
@@ -171,7 +225,20 @@ content.addEventListener('click', e => {
   if (!button) return;
   const {action, id} = button.dataset;
   const event = state.events.find(item => item.id === id);
-  if (action === 'event') createEvent();
+  if (action === 'event') createEvent(button.dataset.day);
+  if (action.startsWith('calendar-')) {
+    if (action === 'calendar-day' || action === 'calendar-today') {
+      selectedDay = button.dataset.day || dateValue();
+    } else {
+      const month = new Date(visibleMonth + '-01T12:00');
+      month.setMonth(month.getMonth() + (action === 'calendar-next' ? 1 : -1));
+      selectedDay = calendarDate(month);
+    }
+    visibleMonth = selectedDay.slice(0, 7);
+    render();
+    const focusTarget = action === 'calendar-day' ? '[aria-pressed="true"]' : `[data-action="${action}"]`;
+    content.querySelector(focusTarget)?.focus();
+  }
   if (action === 'vote' && event) vote(event);
   if (action === 'leave' && event && event.owner !== state.member) {
     delete event.votes[state.member];
