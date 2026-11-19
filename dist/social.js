@@ -1,9 +1,11 @@
 const content = document.querySelector('#content');
+const landingPage = document.querySelector('#landing-page');
 const nav = document.querySelector('#navigation');
 const sidebarProfile = document.querySelector('#sidebar-profile');
 const sidebarAccount = document.querySelector('#sidebar-account');
 const sidebarUserName = document.querySelector('#sidebar-user-name');
-const roleLink = document.querySelector('#role-link');
+const drawerVoyage = document.querySelector('#drawer-voyage');
+const drawerVoyageName = document.querySelector('#drawer-voyage-name');
 const mapLink = document.querySelector('#ship-map-link');
 const tripLabel = document.querySelector('#trip-label');
 const connection = document.querySelector('#connection');
@@ -28,11 +30,12 @@ const icons = {
   star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/>'
 };
 const links = [
-  ['wydarzenia', 'Wydarzenia'], ['kalendarz', 'Kalendarz'], ['poznaj', 'Poznaj ludzi'],
-  ['mapa', 'Mapa statku'], ['moje-zapisy', 'Moje zapisy']
+  ['wydarzenia', 'Wydarzenia', 'ticket'], ['kalendarz', 'Kalendarz', 'calendar'], ['poznaj', 'Poznaj ludzi', 'users'],
+  ['mapa', 'Mapa statku', 'map'], ['moje-zapisy', 'Moje zapisy', 'bookmark']
 ];
 
 const icon = name => '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + icons[name] + '</svg>';
+const navIcon = name => '<svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#' + name + '"/></svg>';
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 }[char]));
@@ -65,6 +68,7 @@ let operation = false;
 let refreshing = false;
 let requestVersion = 0;
 let chatPoll;
+let landingAnimated;
 
 function readLocal(key) {
   try { return localStorage.getItem(key); } catch { return null; }
@@ -102,7 +106,8 @@ function route() {
   const [page, query = ''] = hash.split('?');
   const [section, id] = page.split('/');
   const params = new URLSearchParams(query);
-  return {page: section || 'wydarzenia', id, token: params.get('kod'), date: params.get('dzien')};
+  if (section === 'statki' || section === 'przewodnik') return {page: 'start', id: section};
+  return {page: section || 'start', id, token: params.get('kod'), date: params.get('dzien')};
 }
 function navigate(target) {
   if (location.hash === '#' + target) render(true);
@@ -138,6 +143,7 @@ async function request(payload, suffix = '') {
 }
 
 async function refresh(force = false) {
+  if (route().page === 'start') return;
   if (refreshing || operation || (readLocal(logoutKey) && !readLocal(logoutKey).startsWith('pending'))) return;
   refreshing = true;
   const version = requestVersion;
@@ -158,7 +164,7 @@ async function refresh(force = false) {
   } catch (error) {
     if (version !== requestVersion) return;
     const cached = cachedBoard();
-    if (error.code === 'DEMO_NOT_CONFIGURED' && !cached && route().page !== 'rejestracja') {
+    if (error.code === 'DEMO_NOT_CONFIGURED' && !cached && !['start', 'mapa', 'rejestracja'].includes(route().page)) {
       location.replace(new URL('legacy.html' + location.hash, location.href));
       return;
     }
@@ -326,13 +332,13 @@ function renderCalendar() {
     const date = cell.toISOString().slice(0, 10);
     const listings = eventsByDay.get(date) || [];
     const bySource = Object.keys(eventSources).map(source => [source, listings.filter(event => sourceOf(event) === source)]);
-    return '<button type="button" class="calendar-day' + (date.startsWith(month) ? '' : ' outside') + '" data-action="day" data-id="' +
+    return '<div class="calendar-cell-wrap"><button type="button" class="calendar-day' + (date.startsWith(month) ? '' : ' outside') + '" data-action="day" data-id="' +
       date + '" aria-pressed="' + (day === date) + '" aria-label="' + previewDate(date) + (listings.length ?
         bySource.filter(([, items]) => items.length).map(([source, items]) => ', ' + eventSources[source] + ' ' + items.length).join('') :
-        ', brak wydarzeń') + '"' + (today === date ? ' aria-current="date"' : '') + '><span class="day-number">' + cell.getUTCDate() + '</span>' +
+        ', brak wydarzeń') + '"' + (today === date ? ' aria-current="date"' : '') + '><span class="day-number">' + cell.getUTCDate() + '</span></button>' +
       '<span class="calendar-markers" aria-hidden="true">' + bySource.filter(([, items]) => items.length).map(([source, items]) =>
         '<span class="calendar-event source-' + source + '">' + eventTime(items[0]) + ' ' + escape(items[0].title) +
-        (items.length > 1 ? ' · +' + (items.length - 1) : '') + '</span>').join('') + '</span></button>';
+        (items.length > 1 ? ' · +' + (items.length - 1) : '') + '</span>').join('') + '</span></div>';
   }).join('');
   const label = new Intl.DateTimeFormat('pl-PL', {timeZone: 'UTC', month: 'long', year: 'numeric'}).format(first);
   const agenda = (eventsByDay.get(day) || []).map(event => '<article class="agenda-item source-' + sourceOf(event) + '"><time datetime="' +
@@ -519,7 +525,12 @@ function adminVoyages() {
   const voyage = board.voyage;
   const history = board.voyages.filter(item => !item.active);
   const cabins = board.cabins.filter(cabin => cabin.voyageId === voyage?.id);
-  return '<div class="admin-grid">' + (voyage ?
+  const capacity = cabins.reduce((total, cabin) => total + cabin.capacity, 0);
+  const occupied = cabins.reduce((total, cabin) => total + cabin.used, 0);
+  return (voyage ? '<dl class="admin-overview" aria-label="Stan aktywnego rejsu">' +
+    [['Kabiny', cabins.length], ['Goście', occupied], ['Wolne miejsca', capacity - occupied]].map(([label, value]) =>
+      '<div><dt>' + label + '</dt><dd>' + value + '</dd></div>').join('') + '</dl>' : '') +
+    '<div class="admin-grid">' + (voyage ?
     card('<div class="admin-title"><div><h2>' + escape(voyage.name) + '</h2><p>' + escape(voyage.timeZone) + '</p></div>' +
       '<span class="pill positive">Aktywny rejs</span></div>' +
       button('Zakończ rejs', 'closeVoyage', voyage.id, '', 'danger')) +
@@ -529,12 +540,15 @@ function adminVoyages() {
       field('Liczba gości na kabinę', 'capacity', '2', 'type="number" min="1" max="20" required'), submit('Dodaj kabiny'))) :
     card('<h2>Utwórz rejs</h2>' + form('createVoyage', field('Nazwa rejsu', 'name', '', 'required maxlength="80"') +
       field('Strefa czasowa', 'timeZone', 'Europe/Warsaw', 'required maxlength="80"'), submit('Utwórz rejs')))) + '</div>' +
-    (voyage ? '<h2 class="section-title">Kabiny</h2>' + (cabins.length ? '<div class="rows">' + cabins.map(cabin =>
-      card('<div><h3>Kabina ' + escape(cabin.label) + '</h3><p>' + cabin.used + ' / ' + cabin.capacity + ' kont · ' +
+    (voyage ? '<h2 class="section-title">Kabiny</h2>' + (cabins.length ? (cabins.length > 6 ?
+      '<label class="directory-filter">Szukaj kabiny<input type="search" data-filter-list="cabins" placeholder="Numer kabiny"></label>' : '') +
+      '<div class="rows" id="cabins">' + cabins.map(cabin =>
+      card('<div><h3 data-search-text="' + escape(cabin.label) + '">Kabina ' + escape(cabin.label) + '</h3><p>' +
+        cabin.used + ' / ' + cabin.capacity + ' kont · ' +
         (cabin.hasCode ? 'QR aktywny' : 'Brak aktywnego QR') + '</p></div><div class="button-row">' +
         button(cabin.hasCode ? 'Odnów QR' : 'Generuj QR', 'issueQr', cabin.id, 'data-replace="' + cabin.hasCode + '"', 'secondary') +
         (cabin.hasCode ? button('Unieważnij', 'revokeQr', cabin.id, '', 'danger') : '') + '</div>', 'admin-row')).join('') +
-      '</div>' : empty('Dodaj pierwszą kabinę')) : '') +
+      '</div><p data-filter-empty="cabins" role="status" hidden>Brak kabin pasujących do wyszukiwania.</p>' : empty('Dodaj pierwszą kabinę')) : '') +
     '<h2 class="section-title">Archiwum rejsów</h2>' + (history.length ? '<div class="rows">' + history.map(item =>
       card('<div><h3>' + escape(item.name) + '</h3><p>' + escape(item.timeZone) + '</p></div>' +
         button('Pokaż wydarzenia', 'archive', item.id, '', 'secondary'), 'admin-row')).join('') + '</div>' :
@@ -554,13 +568,13 @@ function adminAccounts() {
 }
 
 function renderAdmin() {
-  const tabs = [['voyages', 'Rejsy i kabiny'], ['accounts', 'Konta'], ['events', 'Wydarzenia']];
+  const tabs = [['voyages', 'Rejsy i kabiny', 'ship'], ['accounts', 'Konta', 'users'], ['events', 'Wydarzenia', 'calendar']];
   const archive = board.voyages?.find(voyage => voyage.id === archiveId);
   return renderHeading('Panel admina', '', !offline && board.voyage && adminTab === 'events' && !archive ?
       '<a class="button primary" href="#dodaj">' + icon('plus') + 'Dodaj wydarzenie</a>' : '') +
     (offline ? empty('Panel jest dostępny online') :
-      '<div class="segmented section-tabs" aria-label="Sekcje panelu admina">' + tabs.map(([key, label]) =>
-        button(label, 'adminTab', key, 'aria-pressed="' + (adminTab === key) + '"')).join('') + '</div>' +
+      '<div class="segmented section-tabs admin-tabs" role="group" aria-label="Sekcje panelu admina">' + tabs.map(([key, label, symbol]) =>
+        button(navIcon(symbol) + '<span>' + label + '</span>', 'adminTab', key, 'aria-pressed="' + (adminTab === key) + '"')).join('') + '</div>' +
       (adminTab === 'voyages' ? adminVoyages() : adminTab === 'accounts' ? adminAccounts() :
         (archive ? '<div class="toolbar"><h2>' + escape(archive.name) + ' · Archiwum</h2>' +
           button('Aktywny rejs', 'archive', '', '', 'secondary') + '</div>' : '') +
@@ -568,8 +582,31 @@ function renderAdmin() {
           .sort((a, b) => b.startsAt.localeCompare(a.startsAt)), true)));
 }
 
+function renderLanding(id, focus) {
+  if (!content.contains(landingPage)) content.replaceChildren(landingPage);
+  if (!id && !landingAnimated) {
+    landingAnimated = true;
+    document.dispatchEvent(new Event('crewconnect:landing'));
+  }
+  if (id === 'statki' || id === 'przewodnik') {
+    const section = document.getElementById(id);
+    section.focus({preventScroll: true});
+    section.scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'});
+  } else if (focus) {
+    content.querySelector('h1').focus({preventScroll: true});
+    window.scrollTo(0, 0);
+  }
+}
+
 function render(focus = false) {
   const {page, id, date} = route();
+  document.body.classList.toggle('is-landing', page === 'start');
+  if (page === 'start') {
+    content.classList.remove('map-content');
+    document.title = 'CrewConnect — Twój przewodnik po rejsie';
+    renderLanding(id, focus);
+    return;
+  }
   if (['aktywnosci', 'raporty', 'plan-zalogi', 'dziennik-raportow', 'zaloga', 'konto'].includes(page)) {
     const target = {zaloga: 'poznaj', konto: 'profil'}[page] || 'wydarzenia';
     history.replaceState(null, '', '#' + target);
@@ -579,16 +616,28 @@ function render(focus = false) {
   const displayNav = Boolean(user) && page !== 'rejestracja';
   const parent = ['wydarzenie', 'dodaj-spotkanie', 'edytuj-spotkanie'].includes(page) ? 'wydarzenia' : page;
   nav.hidden = !displayNav;
+  const publicNavigation = document.querySelector('#public-navigation');
+  publicNavigation.hidden = displayNav;
+  for (const link of publicNavigation.querySelectorAll('a')) {
+    if (link.hash === '#' + page) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  }
+  const voyageName = page === 'mapa' ? 'Wonder of the Seas' : displayNav ? board.voyage?.name : '';
+  drawerVoyage.hidden = !voyageName;
+  drawerVoyageName.textContent = voyageName || '';
+  const panelLink = user?.role === 'admin' ? ['admin', 'Panel admina', 'shield'] :
+    user?.role === 'planner' ? ['planner', 'Panel plannera', 'shield'] : null;
+  const navLink = ([key, label, symbol]) => '<a href="#' + key + '"' +
+    (parent === key ? ' aria-current="page"' : '') + '>' + navIcon(symbol) + '<span>' + label + '</span></a>';
   nav.innerHTML = displayNav ? '<div class="nav-group" role="group" aria-labelledby="nav-life"><p id="nav-life">Życie na pokładzie</p>' +
-    links.map(([key, label]) => '<a href="#' + key + '"' +
-      (parent === key ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') + '</div>' : '';
+    links.map(navLink).join('') + '</div>' +
+    (panelLink ? '<div class="nav-group" role="group" aria-labelledby="nav-manage"><p id="nav-manage">Zarządzanie</p>' + navLink(panelLink) + '</div>' : '') : '';
   sidebarProfile.hidden = !displayNav;
   sidebarUserName.textContent = displayNav ? user.name || '' : '';
-  if (displayNav && (page === 'profil' || (page === 'admin' && user.role === 'admin'))) sidebarAccount.setAttribute('aria-current', 'page');
+  if (displayNav && page === 'profil') sidebarAccount.setAttribute('aria-current', 'page');
   else sidebarAccount.removeAttribute('aria-current');
   mapLink.hidden = displayNav;
-  roleLink.hidden = !displayNav || user.role !== 'planner';
-  tripLabel.textContent = displayNav ? board.voyage?.name || '' : '';
+  tripLabel.textContent = displayNav ? board.voyage?.name || 'CrewConnect' : page === 'mapa' ? 'Wonder of the Seas' : 'CrewConnect';
   connection.hidden = !offline || !displayNav;
   connection.textContent = offline && cachedAt ? 'Offline · dane z ' + new Date(cachedAt).toLocaleString('pl-PL', {dateStyle: 'short', timeStyle: 'short'}) : '';
   const canUseBoard = board?.access && board.voyage;
@@ -610,8 +659,10 @@ function render(focus = false) {
   else if (page === 'kalendarz') content.innerHTML = renderCalendar();
   else if (page === 'poznaj') content.innerHTML = renderPeople();
   else content.innerHTML = renderEvents();
+  const heading = content.querySelector('h1');
+  document.title = heading ? heading.textContent.trim() + ' — CrewConnect' : 'CrewConnect';
   if (focus) {
-    (content.querySelector('h1') || content).focus({preventScroll: true});
+    (heading || content).focus({preventScroll: true});
     window.scrollTo(0, 0);
   }
 }
@@ -619,7 +670,8 @@ function render(focus = false) {
 function renderMap(id) {
   const src = 'navigation.html?embed=1' + (id ? '&place=' + encodeURIComponent(id) : '');
   if (content.querySelector('.ship-map-frame')?.getAttribute('src') === src) return;
-  content.innerHTML = '<iframe class="ship-map-frame" title="Mapa statku" src="' + escape(src) + '"></iframe>';
+  content.innerHTML = '<h1 class="visually-hidden" tabindex="-1">Mapa statku</h1>' +
+    '<iframe class="ship-map-frame" title="Plan pokładów Wonder of the Seas" src="' + escape(src) + '"></iframe>';
 }
 
 function showResult(title, body, actions = '') {
@@ -943,7 +995,10 @@ function initRoute() {
   if (route().page === 'rejestracja') {
     loginFlow = {email: ''};
     void loadInvite(route().token);
-  } else render(true);
+  } else {
+    render(true);
+    if (route().page !== 'start' && !board) void refresh();
+  }
 }
 function onlineRefresh() {
   if (route().page === 'rejestracja' && invite?.error) void loadInvite(route().token);
@@ -971,7 +1026,7 @@ if (apiBase && new URL(apiBase).origin !== location.origin) {
   });
   setInterval(() => {
     if (!document.hidden && ['wydarzenia', 'kalendarz', 'moje-zapisy', 'wydarzenie', 'poznaj', 'planner', 'admin'].includes(route().page) &&
-        !content.querySelector('form:focus-within') && !dialog.open) void refresh();
+        !content.querySelector('form:focus-within, .directory-filter:focus-within') && !dialog.open) void refresh();
   }, 15000);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   if (readLocal(logoutKey)) board = {user: null};

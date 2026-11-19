@@ -13,17 +13,20 @@
     }
     if (mapParams.get('pick') === '1') document.documentElement.classList.add('place-picker');
   </script>
-  <link rel="stylesheet" href="ship-map.css?v=6">
+  <link rel="stylesheet" href="ship-map.css?v=7">
+  <link rel="stylesheet" href="design.css?v=1">
+  <script src="design.js?v=1" defer></script>
   <title>Mapa statku — CrewConnect</title>
 </head>
-<body>
+<body class="map-document">
   <header class="masthead">
     <div class="masthead-inner">
-      <a class="map-brand" href="./"><span aria-hidden="true">⌖</span> CrewConnect</a>
+      <a class="map-brand brand" href="./"><span class="brand-icon"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#compass"/></svg></span> CrewConnect</a>
       <nav class="modes" aria-label="Tryb mapy">
         <button type="button" id="guest-mode" aria-pressed="true">Dla gości</button>
         <button type="button" id="admin-mode" aria-pressed="false">Zarządzaj miejscami</button>
       </nav>
+      <button class="icon-button map-theme" type="button" data-theme-toggle aria-label="Włącz tryb ciemny"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#moon"/></svg></button>
     </div>
   </header>
   <main class="map-page">
@@ -33,37 +36,40 @@
     </div>
     <div class="map-layout">
       <aside class="controls" id="guest-panel" aria-labelledby="planner-title">
-        <h2 id="planner-title">Zaplanuj przejście</h2>
-        <div class="field" id="origin-field">
-          <label for="origin">Punkt startowy</label>
-          <select id="origin"></select>
-          <button type="button" class="text-button" id="pick-origin" aria-pressed="false">Wskaż start na mapie</button>
-        </div>
-        <fieldset class="field transport">
-          <legend>Zmiana pokładu</legend>
-          <div class="segments">
-            <label><input type="radio" name="transport" value="lift" checked><span>Winda</span></label>
-            <label><input type="radio" name="transport" value="stairs"><span>Schody</span></label>
-          </div>
-        </fieldset>
+        <h2 id="planner-title"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#pin"/></svg> Zaplanuj przejście</h2>
         <div class="field places-field">
           <label for="place-search">Dokąd chcesz iść?</label>
           <input id="place-search" type="search" placeholder="Szukaj, np. kasyno" autocomplete="off">
           <ul class="places-list" id="guest-places"></ul>
         </div>
+        <details class="route-options" id="route-options">
+          <summary>Punkt startowy i sposób przejścia</summary>
+          <div class="field" id="origin-field">
+            <label for="origin">Punkt startowy</label>
+            <select id="origin"></select>
+            <button type="button" class="text-button" id="pick-origin" aria-pressed="false">Wskaż start na mapie</button>
+          </div>
+          <fieldset class="field transport">
+            <legend>Zmiana pokładu</legend>
+            <div class="segments">
+              <label><input type="radio" name="transport" value="lift" checked><span>Winda</span></label>
+              <label><input type="radio" name="transport" value="stairs"><span>Schody</span></label>
+            </div>
+          </fieldset>
+        </details>
       </aside>
       <aside class="controls" id="admin-panel" aria-labelledby="admin-title" hidden>
-        <h2 id="admin-title">Miejsca na statku</h2>
+        <h2 id="admin-title"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#map"/></svg> Miejsca na statku</h2>
         <p class="storage-note" id="storage-note"></p>
-        <div class="field" id="admin-auth" hidden>
-          <label for="map-password">Hasło administratora mapy</label>
-          <input id="map-password" type="password" autocomplete="current-password" maxlength="256">
-        </div>
         <div class="catalog-field">
           <label for="catalog">Wybierz miejsce do edycji</label>
           <select id="catalog"></select>
         </div>
         <form id="place-form">
+          <div class="field" id="admin-auth" hidden>
+            <label for="map-password">Hasło administratora mapy</label>
+            <input id="map-password" type="password" autocomplete="current-password" maxlength="256">
+          </div>
           <div class="field">
             <label for="place-name">Nazwa miejsca</label>
             <input id="place-name" name="name" maxlength="64" required>
@@ -99,10 +105,11 @@
             <div class="map-maneuver"><span id="map-maneuver" aria-hidden="true"></span>
               <div><p id="map-step-count"></p><strong id="map-instruction"></strong></div>
             </div>
-            <div class="guidance-controls">
+            <div class="guidance-controls" id="guidance-controls">
               <button type="button" class="button" id="previous-step" aria-label="Poprzedni krok">‹</button>
               <button type="button" class="button button-primary" id="next-step" aria-label="Następny krok">Dalej</button>
             </div>
+            <button type="button" class="button button-primary" id="resume-route" hidden>Wróć do trasy</button>
           </div>
           <div class="map-viewport" id="map-viewport" tabindex="0" aria-label="Mapa pokładu do przewijania">
             <div class="map-space" id="map-space">
@@ -141,6 +148,6 @@
       }).observe(document.body);
     }
   </script>
-  <script type="module" src="ship-map.mjs?v=8"></script>
+  <script type="module" src="ship-map.mjs?v=9"></script>
 </body>
 </html>

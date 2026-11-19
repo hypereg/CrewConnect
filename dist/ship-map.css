@@ -180,7 +180,7 @@ textarea { resize: vertical; }
 .map-note { margin: 0; font-size: 13px; }
 
 .place-picker .masthead, .place-picker .map-heading, .place-picker #origin-field,
-.place-picker .transport, .place-picker .map-legend, .place-picker .route-card, .place-picker .map-note { display: none; }
+.place-picker .route-options, .place-picker .map-legend, .place-picker .route-card, .place-picker .map-note { display: none; }
 .place-picker .map-page { padding: 10px 10px 7rem; }
 .place-picker .map-layout { gap: 10px; }
 .place-picker .controls { padding: 12px; }
