@@ -255,3 +255,16 @@
 .sidebar .profile a{display:flex;align-items:center;min-height:44px;padding:8px 10px;border:1px solid #38516a;border-radius:8px;background:#1b2c41;color:white;font-weight:650;text-decoration:none;overflow-wrap:anywhere}
 .sidebar .profile a:hover,.sidebar .profile a[aria-current]{background:#214453;color:#b2f5ea}
 .crewconnect-layout.on-duties .sidebar .profile{display:grid}
+
+.chat-typing{min-height:1.4em;margin:8px 0 0;padding-inline:8px;color:#526578;font-size:14px}
+.chat-compose{gap:8px;margin-top:7px}
+.chat-toolbar,.chat-edit{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.chat-edit{padding:5px 9px;border-left:3px solid var(--accent);background:#e8f2f5;border-radius:4px;font-size:14px}
+.chat-toolbar button,.chat-edit button{min-height:42px}
+.chat-emoji{display:grid;grid-template-columns:repeat(auto-fit,minmax(40px,1fr));gap:4px;padding:6px;border:1px solid var(--line);border-radius:10px}
+.chat-emoji button{min-height:42px;border:0;border-radius:8px;background:#fff;font-size:21px}
+.chat-emoji button:hover,.chat-emoji button:focus-visible{background:#e8f2f5}
+.chat-message.removed p{color:#526578;font-style:italic}
+.chat-message-actions{display:flex;gap:8px;margin-top:3px}
+.chat-message-actions button{min-height:32px;background:transparent;color:#245462;border:0;padding:0 3px;text-decoration:underline;text-underline-offset:3px;font-size:13px}
+.chat-message-actions button:last-child{color:#8a3450}

@@ -394,9 +394,19 @@ function openCrewChat(profile, celebrate = false) {
     </div>
     <div data-chat ${celebrate ? 'hidden' : ''}>
       <div class="chat-messages" role="log" aria-label="Historia wiadomości"></div>
+      <p class="chat-typing" role="status"></p>
       <form class="chat-compose">
-        <label>Wiadomość <textarea name="message" rows="2" maxlength="500" required></textarea></label>
-        <button type="submit" class="primary">Wyślij</button>
+        <div class="chat-edit" hidden><strong>Edytujesz wiadomość</strong><button type="button" class="secondary" data-chat-cancel>Anuluj</button></div>
+        <label>Wiadomość <textarea name="message" rows="2" maxlength="500" required aria-describedby="chat-shortcuts"></textarea></label>
+        <div class="chat-toolbar">
+          <button type="button" class="secondary" data-emoji-toggle aria-expanded="false" aria-controls="chat-emoji">😊 Emoji</button>
+          <button type="submit" class="primary">Wyślij</button>
+        </div>
+        <div class="chat-emoji" id="chat-emoji" aria-label="Wybierz emoji" hidden>
+          ${['😀','😂','🥰','😍','😉','😎','🙌','👍','♥️','🔥','🎉','⚓','🌊','☕','🎮','💬'].map(emoji =>
+            `<button type="button" data-emoji="${emoji}">${emoji}</button>`).join('')}
+        </div>
+        <small class="muted" id="chat-shortcuts">Enter wysyła. Shift + Enter dodaje nową linię.</small>
       </form>
     </div>`;
   dialog.setAttribute('aria-labelledby', 'dialog-title');
@@ -404,16 +414,106 @@ function openCrewChat(profile, celebrate = false) {
   const history = dialog.querySelector('.chat-messages');
   const form = dialog.querySelector('.chat-compose');
   const input = form.elements.message;
+  const submit = form.querySelector('[type=submit]');
+  const typing = dialog.querySelector('.chat-typing');
+  const emojiToggle = form.querySelector('[data-emoji-toggle]');
+  const emojiPanel = form.querySelector('.chat-emoji');
   let remoteMessages = [];
-  function renderMessages() {
-    const messages = remoteMessages;
-    history.innerHTML = messages.map(message => `
-      <article class="chat-message${message.sender === author ? ' own' : ''}">
-        <span class="chat-meta">${message.sender === author ? 'Ty' : name} · ${chatTime.format(new Date(message.at))}</span>
-        <p>${escape(message.text)}</p>
-      </article>`).join('') || '<p class="muted">Wyślij pierwszą wiadomość.</p>';
-    history.scrollTop = history.scrollHeight;
+  let editing;
+  let draft = '';
+  let lastTyping = 0;
+  let typingActive = false;
+
+  function setEmojiPanel(open) {
+    emojiPanel.hidden = !open;
+    emojiToggle.setAttribute('aria-expanded', String(open));
   }
+
+  function updateTyping(active) {
+    const now = Date.now();
+    if (active && now - lastTyping < 2200) return;
+    if (!active && !typingActive) return;
+    typingActive = active;
+    lastTyping = active ? now : 0;
+    void discoveryRequest({action: 'typing', peer: profile, active}).catch(() => {});
+  }
+
+  function renderMessages() {
+    const nearBottom = history.scrollHeight - history.scrollTop - history.clientHeight < 70;
+    const focused = history.contains(document.activeElement) ? document.activeElement : null;
+    const focusedId = focused?.dataset.chatId;
+    const focusedAction = focused?.dataset.chatAction;
+    history.innerHTML = remoteMessages.map(message => {
+      const own = message.sender === author;
+      return `<article class="chat-message${own ? ' own' : ''}${message.deletedAt ? ' removed' : ''}">
+        <span class="chat-meta">${own ? 'Ty' : name} · ${chatTime.format(new Date(message.at))}${!message.deletedAt && message.editedAt ? ' · Edytowano' : ''}</span>
+        <p>${message.deletedAt ? 'Wiadomość usunięta' : escape(message.text)}</p>
+        ${own && !message.deletedAt ? `<div class="chat-message-actions">
+          <button type="button" data-chat-action="edit" data-chat-id="${escape(message.id)}">Edytuj</button>
+          <button type="button" data-chat-action="delete" data-chat-id="${escape(message.id)}">Usuń</button>
+        </div>` : ''}
+      </article>`;
+    }).join('') || '<p class="muted">Wyślij pierwszą wiadomość.</p>';
+    if (nearBottom) history.scrollTop = history.scrollHeight;
+    if (focusedId) [...history.querySelectorAll('[data-chat-id]')].find(button =>
+      button.dataset.chatId === focusedId && button.dataset.chatAction === focusedAction)?.focus({preventScroll: true});
+  }
+
+  function closeEdit() {
+    editing = undefined;
+    form.querySelector('.chat-edit').hidden = true;
+    submit.textContent = 'Wyślij';
+    input.value = draft;
+    draft = '';
+    input.focus();
+  }
+
+  form.querySelector('[data-chat-cancel]').onclick = () => { if (!submit.disabled) closeEdit(); };
+  emojiToggle.onclick = () => setEmojiPanel(emojiPanel.hidden);
+  emojiPanel.onclick = event => {
+    const emoji = event.target.closest('[data-emoji]')?.dataset.emoji;
+    if (!emoji) return;
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    if (input.value.length - (end - start) + emoji.length > input.maxLength) return;
+    input.setRangeText(emoji, start, end, 'end');
+    setEmojiPanel(false);
+    input.focus();
+    updateTyping(true);
+  };
+  input.addEventListener('input', () => updateTyping(Boolean(input.value.trim())));
+  input.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || event.shiftKey || event.isComposing || event.keyCode === 229) return;
+    event.preventDefault();
+    form.requestSubmit();
+  });
+  history.onclick = async event => {
+    if (submit.disabled) return;
+    const button = event.target.closest('[data-chat-action]');
+    const message = remoteMessages.find(item => item.id === button?.dataset.chatId && item.sender === author && !item.deletedAt);
+    if (!message) return;
+    if (button.dataset.chatAction === 'edit') {
+      if (!editing) draft = input.value;
+      editing = message.id;
+      input.value = message.text;
+      form.querySelector('.chat-edit').hidden = false;
+      submit.textContent = 'Zapisz zmiany';
+      input.focus();
+      return;
+    }
+    if (!window.confirm('Usunąć tę wiadomość z rozmowy?')) return;
+    button.disabled = true;
+    try {
+      await discoveryRequest({action: 'deleteMessage', peer: profile, messageId: message.id});
+      if (editing === message.id) closeEdit();
+      await reloadMessages();
+    } catch (error) {
+      announce(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  };
+
   const showChat = () => {
     if (!dialog.open || !form.isConnected) return;
     dialog.querySelector('.match-celebration').hidden = true;
@@ -427,8 +527,11 @@ function openCrewChat(profile, celebrate = false) {
     if (chatLoading || !dialog.open || !form.isConnected) return;
     chatLoading = true;
     try {
-      const {messages} = await discoveryRequest(null, profile);
-      if (form.isConnected && JSON.stringify(messages) !== JSON.stringify(remoteMessages)) {
+      const {messages, peerTyping} = await discoveryRequest(null, profile);
+      if (!form.isConnected) return;
+      const status = peerTyping ? peerName + ' pisze…' : '';
+      if (typing.textContent !== status) typing.textContent = status;
+      if (JSON.stringify(messages) !== JSON.stringify(remoteMessages)) {
         remoteMessages = messages;
         renderMessages();
       }
@@ -438,16 +541,18 @@ function openCrewChat(profile, celebrate = false) {
       chatLoading = false;
     }
   }
-  const pollChat = setInterval(reloadMessages, 3000);
+  const pollChat = setInterval(reloadMessages, 1500);
   form.onsubmit = async event => {
     event.preventDefault();
     const text = input.value.trim();
-    const submit = form.querySelector('[type=submit]');
     if (!text || text.length > 500 || submit.disabled) return;
     submit.disabled = true;
     try {
-      await discoveryRequest({action: 'message', peer: profile, text});
-      input.value = '';
+      await discoveryRequest({action: editing ? 'editMessage' : 'message', peer: profile, messageId: editing, text});
+      if (editing) closeEdit();
+      else input.value = '';
+      updateTyping(false);
+      setEmojiPanel(false);
       await reloadMessages();
     } catch (error) {
       announce(error.message);
@@ -459,6 +564,7 @@ function openCrewChat(profile, celebrate = false) {
   dialog.querySelector('[data-start-chat]').onclick = showChat;
   dialog.addEventListener('close', () => {
     clearInterval(pollChat);
+    updateTyping(false);
     dialog.classList.remove('crew-chat-dialog');
     [...content.querySelectorAll('[data-action="crew-chat"]')].find(button => button.dataset.profile === profile)?.focus();
   }, {once: true});
