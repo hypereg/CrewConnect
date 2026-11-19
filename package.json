@@ -6,11 +6,13 @@
     "node": ">=22"
   },
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "test": "node --test"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.7",
     "@grpc/proto-loader": "^0.8.1",
-    "mongodb": "^6.21.0"
+    "mongodb": "^6.21.0",
+    "qrcode-generator": "1.4.4"
   }
 }

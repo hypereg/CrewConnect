@@ -1,4 +1,24 @@
-# CrewConnect z MongoDB Atlas
+# CrewConnect
+
+## Wspólne demo wydarzeń
+
+1. Użyj Node.js 22 lub nowszego, uruchom `npm ci` i `npm start`, a potem otwórz `http://localhost:3000`.
+2. W lokalnym demie zaloguj się jako `admin@example.test` z kodem `crew-admin-demo`. W panelu admina utwórz rejs, dodaj kabinę i wygeneruj jej kod QR. W sekcji **Konta** utwórz plannera i zapisz jego indywidualny kod.
+3. Otwórz link QR w drugiej przeglądarce lub na drugim telefonie. Podaj testowy e-mail gościa i wpisz kod `123456`. Planner używa tego samego ekranu logowania i własnego kodu.
+
+Lokalnie serwer bez MongoDB współdzieli dane między przeglądarkami do czasu restartu procesu. Do testu na drugim telefonie uruchom serwer z `HOST=0.0.0.0` i otwórz go z obu urządzeń przez ten sam adres sieciowy przed wygenerowaniem QR. Test instalacji PWA i ponownego otwarcia offline wymaga HTTPS lub `localhost`.
+
+### Wdrożenie demo
+
+- Na Vercel lub serwerze Node pod HTTPS skonfiguruj `SOCIAL_MONGODB_URI` (lub `MONGODB_URI`), `DEMO_ADMIN_EMAIL`, indywidualny `DEMO_ADMIN_CODE` (min. 12 znaków) i losowy `DEMO_SESSION_SECRET` (min. 32 znaki). Ustaw `NODE_ENV=production` przy wdrożeniu Node. Dane demo trafiają do osobnej bazy `SOCIAL_MONGODB_DATABASE`, domyślnie `crewconnect_social_demo`.
+- Użyj danych testowych. Kod gościa ma stałą wartość, a adres e-mail jest identyfikatorem demonstracyjnym.
+- Hosting bez ustawień demo udostępnia poprzedni prototyp. Po ustawieniu zmiennych ekranem startowym stają się nowe wydarzenia.
+- Uruchamiaj PWA i API z jednej domeny. Ustaw repozytoryjną zmienną `CREWCONNECT_API_URL` na adres wdrożonego demo, aby GitHub Pages kierował na tę domenę. Workflow zachowuje dotychczasową publikację, gdy zmienna jest pusta.
+- Zestaw testów uruchamia polecenie `npm test`.
+
+## Poprzednia wersja CrewConnect
+
+Poniższe sekcje opisują zachowane moduły poprzedniego prototypu. W jego interfejsie były dostępne warty, obowiązki i raporty głosowe.
 
 Backend wymaga Node.js 22. Wspólny harmonogram wymaga MongoDB. Jeśli korzystasz z Atlas, dodaj adres IP serwera aplikacji do listy dostępu i nadaj użytkownikowi bazy prawo odczytu oraz zapisu w bazie `crewconnect`.
 

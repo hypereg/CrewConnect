@@ -12,6 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy:
+    if: ${{ vars.CREWCONNECT_API_URL != '' }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -34,8 +35,6 @@ jobs:
                   raise SystemExit('CREWCONNECT_API_URL must be an HTTPS origin')
               path = Path('dist/index.html')
               path.write_text(path.read_text().replace('name="crewconnect-api" content=""', f'name="crewconnect-api" content="{html.escape(url, quote=True)}"'))
-          else:
-              print('::warning::CREWCONNECT_API_URL is unset. The frontend will run in local demo mode.')
           PY
       - uses: actions/upload-pages-artifact@v3
         with:
