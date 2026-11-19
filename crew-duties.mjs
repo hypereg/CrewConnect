@@ -117,7 +117,7 @@ export function createDutyApi(db, {CREW_PASSWORD, NVIDIA_API_KEY, FRONTEND_ORIGI
     const user = dutyMember(workspace);
     let members = [];
     if (isSchedule || path === '/api/duties') {
-      const profiles = await directory.find({archived: {$ne: true}, 'snapshot.userProfile.id': {$exists: true}}), profileFields).toArray();
+      const profiles = await directory.find({archived: {$ne: true}, 'snapshot.userProfile.id': {$exists: true}}, profileFields).toArray();
       members = profiles.map(dutyMember);
     }
     if (isSchedule) return snapshot(duties, reports, members, user, voiceEnabled);
