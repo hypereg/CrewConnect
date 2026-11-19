@@ -40,12 +40,12 @@ async function updateSharedEvent(payload, success) {
     await refreshEvents();
     announce(response.ok ? success : result.error);
   } catch {
-    announce('Nie udało się zapisać na tablicy załogi. Spróbuj ponownie po odzyskaniu połączenia.');
+    announce('Nie udało się zapisać na tablicy pokładowej. Spróbuj ponownie po odzyskaniu połączenia.');
   }
 }
 const publishEvent = event => updateSharedEvent({
   ...event, capacity: event.capacity ?? 30, action: 'publish', displayName: personalName(event.owner)
-}, 'Wydarzenie jest widoczne na tablicy załogi.');
+}, 'Wydarzenie jest widoczne na tablicy pokładowej.');
 const pendingKey = 'crewconnect-workspace-pending';
 const logoutKey = 'crewconnect-session-ended';
 const apiBase = document.querySelector('meta[name="crewconnect-api"]')?.content;
@@ -180,7 +180,7 @@ function renderCalendar() {
       ${signupButton(event, 'secondary')}
     </article>`).join('');
   return `<section class="calendar" aria-labelledby="calendar-title">
-    <header class="calendar-header"><div><h1 id="calendar-title">Wspólny kalendarz załogi</h1><h2>${monthLabel.format(first)}</h2></div>
+    <header class="calendar-header"><div><h1 id="calendar-title">Kalendarz rejsu</h1><h2>${monthLabel.format(first)}</h2></div>
       <div class="calendar-controls">
         <button class="secondary" data-action="calendar-today">Dzisiaj</button>
         <button class="secondary" data-action="calendar-prev" aria-label="Poprzedni miesiąc">‹</button>
@@ -212,18 +212,20 @@ function eventCard(event) {
     <p class="note"><strong>${summary}</strong></p>
     <p class="muted">${people.length}${event.capacity ? ' / ' + event.capacity : ''} zapisanych${people.length ? ' · ' + escape(people.map(id => displayName(id, event.memberNames)).join(', ')) : ''}</p>
     <footer>${signupButton(event, 'primary')}
-    ${isShared(event) ? '<span class="badge">Tablica załogi</span>' : eventsAvailable && event.id !== 'fifa' && event.owner === state.member ? `<button class="secondary" data-action="publish" data-id="${event.id}">Opublikuj dla załogi</button>` : ''}
+    ${isShared(event) ? '<span class="badge">Tablica pokładowa</span>' : eventsAvailable && event.id !== 'fifa' && event.owner === state.member ? `<button class="secondary" data-action="publish" data-id="${event.id}">Opublikuj na tablicy</button>` : ''}
     ${event.votes[state.member] && event.owner !== state.member ? `<button class="secondary" data-action="leave" data-id="${event.id}">Wypisz się</button>` : ''}</footer>
   </article>`;
 }
 
-function profileDetails(profile, sharedInterests = []) {
+const profileName = profile => escape(profile.name) + (profile.age ? `, ${escape(profile.age)}` : '');
+
+function profileDetails(profile, sharedInterests = [], showName = true) {
   const intent = datingIntents[profileIntent(profile)];
   const tags = profile.interests.map(interest => {
     const common = sharedInterests.includes(interestKey(interest));
     return `<span${common ? ' class="common-interest"' : ''}>${common ? '✓ ' : ''}${escape(interest)}</span>`;
   }).join('');
-  return `<h2>${escape(profile.name)}${profile.age ? `, ${escape(profile.age)}` : ''}</h2>
+  return `${showName ? `<h2>${profileName(profile)}</h2>` : ''}
     ${profile.role ? `<p class="muted">${escape(profile.role)}</p>` : ''}
     ${profile.bio ? `<p class="profile-bio">${escape(profile.bio)}</p>` : ''}
     ${intent ? `<p class="profile-intent">Szukam: <strong>${intent}</strong></p>` : ''}
@@ -233,19 +235,16 @@ function profileDetails(profile, sharedInterests = []) {
 
 function renderUserProfile() {
   const profile = state.userProfile;
-  return `<header class="crew-heading"><h1>Mój profil</h1></header>
-    <article class="card profile-card">
-      <div class="crew-portrait teal"><span aria-hidden="true">${profile ? escape(initials(profile.name)) : '◇'}</span></div>
-      <div class="crew-details">
-        ${profile ? profileDetails(profile) : '<h2>Przedstaw się załodze</h2><p class="muted">Wybierz nazwę i dodaj kilka słów o sobie.</p>'}
-        <footer>
-          <button class="primary" data-action="profile-edit">${profile ? 'Edytuj profil' : 'Utwórz profil'}</button>
-          ${apiBase ? '' : profile ? '<button class="secondary" data-action="profile-logout">Wyloguj się</button>' :
-            '<button class="secondary" data-action="profile-login">Zaloguj się</button>'}
-        </footer>
-      </div>
-    </article>
-    <p class="muted profile-note">Tego profilu używasz przy aktywnościach, w harmonogramie i w „Poznaj załogę”. Po opublikowaniu zmiany z tego formularza pojawiają się też na Twojej karcie.</p>`;
+  const details = profile ? profileDetails(profile, [], false) : '<p class="muted">Wybierz nazwę i dodaj kilka słów o sobie.</p>';
+  return renderMyProfile({
+    name: profile ? profileName(profile) : 'Przedstaw się innym',
+    avatar: profile ? escape(initials(profile.name)) : '',
+    details: `${details}<p class="muted">Tego profilu używasz przy aktywnościach, rezerwacjach i w „Poznaj ludzi”. Po opublikowaniu zmiany z tego formularza pojawiają się też na Twojej karcie.</p>`,
+    actions: `<button class="primary" data-action="profile-edit">${profile ? 'Edytuj profil' : 'Utwórz profil'}</button>
+      ${apiBase ? '' : profile ? '<button class="secondary" data-action="profile-logout">Wyloguj się</button>' :
+        '<button class="secondary" data-action="profile-login">Zaloguj się</button>'}`,
+    administrationHref: adminKey ? '#administracja' : ''
+  });
 }
 
 let onlineDiscovery;
@@ -314,7 +313,7 @@ function renderDiscoveryCard(profile, commonInterests) {
 }
 
 function renderOnlineDiscovery() {
-  const heading = '<header class="crew-heading"><h1>Poznaj załogę online</h1>' +
+  const heading = '<header class="crew-heading"><h1>Poznaj ludzi na pokładzie</h1>' +
     '<div class="crew-filter"><button class="primary" data-action="online-profile-edit">Edytuj mój profil</button>' +
     '<button class="secondary" data-action="online-reset">Usuń historię dopasowań</button></div></header>';
   const error = onlineError ? `<p class="form-error" role="status">${escape(onlineError)}</p>` : '';
@@ -375,9 +374,9 @@ async function updateOnlineDiscovery(payload, message) {
 
 function renderCrew() {
   if (personalDiscovery()) return renderOnlineDiscovery();
-  return `<header class="crew-heading"><h1>Poznaj załogę online</h1></header>
-    <section class="card crew-empty"><h2>Dołącz do załogi online</h2>
-      <p>Użyj jednego profilu na całym portalu.</p>
+  return `<header class="crew-heading"><h1>Poznaj ludzi na pokładzie</h1></header>
+    <section class="card crew-empty"><h2>Stwórz swój profil</h2>
+      <p>Załóż profil, żeby poznawać osoby podczas rejsu.</p>
       <button class="primary" data-action="online-profile-edit">+ Dodaj nowy profil</button>
     </section>`;
 }
@@ -591,6 +590,7 @@ function chooseCrewProfile(profile, choice) {
 }
 
 function render() {
+  if (location.hash === '#konto') history.replaceState(null, '', '#profil');
   const page = location.hash.slice(1);
   const reports = isDutyPage(page);
   document.body.classList.toggle('on-duties', reports);
@@ -601,9 +601,11 @@ function render() {
   const restaurants = page === 'restauracje';
   const statistics = page === 'statystyki';
   const map = page === 'mapa';
+  const activePage = administration ? 'profil' :
+    (calendar || reports || discover || profile || map || restaurants || statistics ? page : 'aktywnosci');
   content.classList.toggle('map-content', map);
   document.querySelectorAll('[data-page]').forEach(link => {
-    if (link.dataset.page === (calendar || reports || discover || profile || map || administration || restaurants || statistics ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
+    if (link.dataset.page === activePage) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
   activatePersonalProfile();
@@ -629,7 +631,7 @@ function render() {
     content.innerHTML = state.userProfile ? renderDuties(page) :
       '<section class="card"><h1>Warty i obowiązki</h1><p>Dodaj swój profil, aby korzystać z harmonogramu.</p><a href="#profil">Przejdź do profilu</a></section>';
   } else {
-    content.innerHTML = title('Życie na pokładzie', 'Aktywności załogi', 'Zaproponuj wydarzenie i znajdź termin, który pasuje wszystkim zapisanym.', state.userProfile ? 'event' : '', 'Nowa aktywność') +
+    content.innerHTML = title('Życie na pokładzie', 'Aktywności na pokładzie', 'Zaproponuj wydarzenie i znajdź termin, który pasuje wszystkim zapisanym.', state.userProfile ? 'event' : '', 'Nowa aktywność') +
       `<div class="stats">${stat(allEvents().length, 'Aktywności')}${stat(allEvents().filter(event => event.votes[state.member]).length, 'Moje zapisy')}${stat(allEvents().filter(event => sharedSlots(event).length).length, 'Uzgodnione terminy')}</div>
       <section class="section"><h2>Wydarzenia na pokładzie</h2><div class="grid">${allEvents().map(eventCard).join('') || '<p class="empty">Brak aktywności.</p>'}</div></section>`;
   }
@@ -719,6 +721,7 @@ function resetProfileSession() {
   localStorage.removeItem(pendingKey);
   localStorage.removeItem(tokenKey);
   clearDutySession();
+  lockUserAdministration();
   schedule = null;
   scheduleError = null;
   onlineDiscovery = undefined;
@@ -794,6 +797,12 @@ let adminKey = '';
 let adminUsers = [];
 let newUserCode = '';
 
+function lockUserAdministration() {
+  adminKey = '';
+  adminUsers = [];
+  newUserCode = '';
+}
+
 async function adminRequest(payload, key = adminKey) {
   const response = await fetch('api/users', {
     method: payload ? 'POST' : 'GET',
@@ -842,7 +851,7 @@ async function handleUserAdministration(action, id) {
   if (!adminKey) return;
   if (action === 'admin-create') {
     openForm('Dodaj użytkownika', '<label>Nazwa <input name="name" required maxlength="80"></label>' +
-      '<label>Rola na pokładzie <input name="role" maxlength="60"></label>', 'Dodaj konto', async data => {
+      '<label>O Tobie na pokładzie (opcjonalnie) <input name="role" maxlength="60" placeholder="Np. pasażerka, podróżuję z rodziną"></label>', 'Dodaj konto', async data => {
         const result = await adminRequest({action: 'create', name: data.get('name'), role: data.get('role')});
         newUserCode = result.code;
         adminUsers = (await adminRequest()).users;
@@ -851,9 +860,7 @@ async function handleUserAdministration(action, id) {
     return;
   }
   if (action === 'admin-lock') {
-    adminKey = '';
-    adminUsers = [];
-    newUserCode = '';
+    lockUserAdministration();
     render();
     return;
   }
@@ -864,7 +871,7 @@ async function handleUserAdministration(action, id) {
   }
   const operation = action.slice('admin-'.length);
   const questions = {archive: 'Wyłączyć to konto i ukryć jego kartę? Rozmowy zostaną w bazie.',
-    publish: 'Opublikować kartę tej osoby w „Poznaj załogę”? Zrób to tylko za jej zgodą.',
+    publish: 'Opublikować kartę tej osoby w „Poznaj ludzi”? Zrób to tylko za jej zgodą.',
     resetCode: 'Wydać nowy kod logowania? Dotychczasowy niewykorzystany kod przestanie działać.'};
   if (questions[operation] && !window.confirm(questions[operation])) return;
   try {
@@ -883,7 +890,7 @@ function editUserProfile(publishOnline = false) {
   openForm(profile ? 'Edytuj profil' : 'Dodaj nowy profil', `
     <label>Nazwa wyświetlana <input name="displayName" required maxlength="80" autocomplete="nickname" value="${escape(profile?.name ?? '')}" autofocus></label>
     <label>Wiek (opcjonalnie) <input name="age" type="number" min="18" max="120" step="1" inputmode="numeric" value="${profile?.age ?? ''}"></label>
-    <label>Rola na pokładzie <input name="role" maxlength="60" value="${escape(profile?.role ?? '')}"></label>
+    <label>O Tobie na pokładzie (opcjonalnie) <input name="role" maxlength="60" placeholder="Np. pasażerka, podróżuję z rodziną" value="${escape(profile?.role ?? '')}"></label>
     <label>Płeć (opcjonalnie) <select name="gender"><option value="">Nie podaję</option>
       <option value="women" ${profile?.gender === 'women' ? 'selected' : ''}>Kobieta</option>
       <option value="men" ${profile?.gender === 'men' ? 'selected' : ''}>Mężczyzna</option>
@@ -895,7 +902,7 @@ function editUserProfile(publishOnline = false) {
       ${Object.entries(datingIntents).map(([value, label]) => `<option value="${value}" ${profile?.intent === value ? 'selected' : ''}>${label}</option>`).join('')}
     </select></label>
     <label>Pytanie na przełamanie lodów <input name="icebreaker" maxlength="120" placeholder="Np. Jaki port chcesz odwiedzić ponownie?" value="${escape(profile?.icebreaker ?? '')}"></label>
-    ${publishOnline ? '<p class="muted">Zapis opublikuje dane z formularza w „Poznaj załogę”.</p>' : ''}`,
+    ${publishOnline ? '<p class="muted">Zapis opublikuje dane z formularza w „Poznaj ludzi”.</p>' : ''}`,
     publishOnline ? 'Zapisz i opublikuj' : 'Zapisz profil', async (data, form) => {
     const name = data.get('displayName').trim().replace(/\s+/gu, ' ');
     const age = data.get('age') ? Number(data.get('age')) : null;
@@ -961,7 +968,7 @@ function createEvent(day) {
       type: data.get('type'), capacity: Number(data.get('capacity')), description: data.get('description').trim(), slots,
       votes: {[state.member]: slots.map((_, index) => index)}};
     state.events.unshift(event);
-    save(eventsAvailable ? 'Zapisywanie wydarzenia na tablicy załogi…' : 'Zapisano wydarzenie w tej przeglądarce.');
+    save(eventsAvailable ? 'Zapisywanie wydarzenia na tablicy pokładowej…' : 'Zapisano wydarzenie w tej przeglądarce.');
     if (eventsAvailable) void publishEvent(event);
   });
   const slider = dialog.querySelector('#event-capacity');

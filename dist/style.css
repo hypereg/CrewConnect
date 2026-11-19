@@ -140,26 +140,9 @@
   .duty-dates{grid-template-columns:1fr}
 }
 
-.profile-card {
-  display: grid;
-  grid-template-columns: minmax(145px, 29%) minmax(0, 1fr);
-  max-width: 750px;
-  padding: 0;
-  overflow: hidden;
-}
-.profile-card .crew-portrait { min-height: 180px; }
-.profile-card .crew-details { padding: clamp(20px, 4vw, 34px); }
-.profile-card h2 { font-size: clamp(24px, 4vw, 34px); }
 .crew-details, .crew-match { overflow-wrap: anywhere; }
 .crew-interests span { min-width: 0; max-width: 100%; }
 .profile-bio { white-space: pre-line; }
-.profile-card footer { margin-top: 20px; }
-.profile-note { max-width: 64ch; margin: 16px 0 0; font-size: 14px; line-height: 1.5; }
-
-@media (max-width: 540px) {
-  .profile-card { grid-template-columns: 1fr; }
-  .profile-card .crew-portrait { min-height: 130px; }
-}
 .calendar-event.proposed{background:#e3edf5;color:#324e66}
 @media(max-width:540px){.calendar-event.proposed{background:#7894ad;color:transparent}}
 
