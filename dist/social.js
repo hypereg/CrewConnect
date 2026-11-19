@@ -28,7 +28,7 @@ const icons = {
   star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/>'
 };
 const links = [
-  ['wydarzenia', 'Wydarzenia'], ['kalendarz', 'Kalendarz'], ['poznaj', 'Poznaj załogę'],
+  ['wydarzenia', 'Wydarzenia'], ['kalendarz', 'Kalendarz'], ['poznaj', 'Poznaj ludzi'],
   ['mapa', 'Mapa statku'], ['moje-zapisy', 'Moje zapisy']
 ];
 
@@ -429,9 +429,9 @@ function renderPeople() {
   const profiles = board.profiles || [];
   const candidate = profiles.find(profile => !profile.choice);
   const matches = profiles.filter(profile => profile.match);
-  return renderHeading('Poznaj załogę', 'Osoby z Twojego rejsu',
+  return renderHeading('Poznaj ludzi na pokładzie', 'Osoby z Twojego rejsu',
     !offline && user.role === 'guest' ? button('Usuń historię dopasowań', 'resetMatches', '', '', 'secondary') : '') +
-    (offline ? empty('Dopasowania są dostępne online') : user.role !== 'guest' ? empty('Dopasowania są dostępne dla gości rejsu') :
+    (offline ? empty('Dopasowania są dostępne online') : user.role !== 'guest' ? empty('Dopasowania są dostępne dla pasażerów rejsu') :
       !user.visible ? card('<h2>Pokaż swój profil</h2><p>Po włączeniu widoczności możesz przeglądać karty i zobaczyć wzajemne dopasowania.</p>' +
         '<a class="button primary" href="#profil">Ustaw widoczność profilu</a>', 'empty') :
         '<div class="people-grid"><div>' + (candidate ?
@@ -462,11 +462,11 @@ function renderAccountProfile() {
   const editForm = user.role !== 'admin' && board.voyage ? form('profile',
     field('Nazwa wyświetlana', 'name', user.name, 'required maxlength="60"') +
     (guest ? field('Wiek (opcjonalnie)', 'age', user.age ?? '', 'type="number" min="18" max="120" step="1" inputmode="numeric"') +
-      field('Rola na pokładzie', 'roleOnShip', user.roleOnShip, 'maxlength="60"') +
+      field('O Tobie na pokładzie', 'roleOnShip', user.roleOnShip, 'maxlength="60" placeholder="Np. podróżuję z rodziną"') +
       textarea('O mnie', 'bio', user.bio, 'maxlength="240"') +
       field('Zainteresowania (oddziel przecinkami)', 'interests', user.interests.join(', '), 'maxlength="160"') +
       '<label class="check"><input name="visible" type="checkbox" ' + (user.visible ? 'checked' : '') +
-      '> Pokaż mój profil w „Poznaj załogę”</label>' : ''), submit('Zapisz profil')) : '';
+      '> Pokaż mój profil w „Poznaj ludzi”</label>' : ''), submit('Zapisz profil')) : '';
   return renderMyProfile({
     name: escape(user.name),
     avatar: escape(initials(user.name)),
