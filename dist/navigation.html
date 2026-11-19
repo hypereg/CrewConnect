@@ -7,11 +7,13 @@
   <meta name="crewconnect-api" content="">
   <link rel="icon" href="icon.png">
   <script>
-    if (new URLSearchParams(location.search).get('embed') === '1') {
+    const mapParams = new URLSearchParams(location.search);
+    if (mapParams.get('embed') === '1') {
       document.documentElement.classList.add('embedded-map');
     }
+    if (mapParams.get('pick') === '1') document.documentElement.classList.add('place-picker');
   </script>
-  <link rel="stylesheet" href="ship-map.css?v=4">
+  <link rel="stylesheet" href="ship-map.css?v=5">
   <title>Mapa statku — CrewConnect</title>
 </head>
 <body>
@@ -32,7 +34,7 @@
     <div class="map-layout">
       <aside class="controls" id="guest-panel" aria-labelledby="planner-title">
         <h2 id="planner-title">Zaplanuj przejście</h2>
-        <div class="field">
+        <div class="field" id="origin-field">
           <label for="origin">Punkt startowy</label>
           <select id="origin"></select>
           <button type="button" class="text-button" id="pick-origin" aria-pressed="false">Wskaż start na mapie</button>
@@ -125,16 +127,20 @@
         <p class="map-note">Mapa poglądowa pokładów 4–7. Pozycję startową ustawiasz ręcznie. Na statku kieruj się oznaczeniami pokładowymi.</p>
       </div>
     </div>
+    <div class="place-confirm" id="place-confirm" hidden>
+      <span id="meeting-place" role="status"></span>
+      <button type="button" class="button button-primary" id="confirm-place" disabled>Wybierz to miejsce</button>
+    </div>
     <p id="map-status" class="sr-only" role="status"></p>
   </main>
   <script>
-    const frame = document.documentElement.classList.contains('embedded-map') && window.frameElement;
+    const frame = mapParams.get('embed') === '1' && mapParams.get('pick') !== '1' && window.frameElement;
     if (frame) {
       new ResizeObserver(() => {
         frame.style.height = Math.ceil(document.body.getBoundingClientRect().height) + 'px';
       }).observe(document.body);
     }
   </script>
-  <script type="module" src="ship-map.mjs?v=5"></script>
+  <script type="module" src="ship-map.mjs?v=6"></script>
 </body>
 </html>
