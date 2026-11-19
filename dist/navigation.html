@@ -6,7 +6,12 @@
   <meta name="theme-color" content="#102a31">
   <meta name="crewconnect-api" content="">
   <link rel="icon" href="icon.png">
-  <link rel="stylesheet" href="ship-map.css">
+  <script>
+    if (new URLSearchParams(location.search).get('embed') === '1') {
+      document.documentElement.classList.add('embedded-map');
+    }
+  </script>
+  <link rel="stylesheet" href="ship-map.css?v=2">
   <title>Mapa statku — CrewConnect</title>
 </head>
 <body>
@@ -119,6 +124,14 @@
     </div>
     <p id="map-status" class="sr-only" role="status"></p>
   </main>
+  <script>
+    const frame = document.documentElement.classList.contains('embedded-map') && window.frameElement;
+    if (frame) {
+      new ResizeObserver(() => {
+        frame.style.height = Math.ceil(document.body.getBoundingClientRect().height) + 'px';
+      }).observe(document.body);
+    }
+  </script>
   <script type="module" src="ship-map.mjs"></script>
 </body>
 </html>

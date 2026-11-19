@@ -34,16 +34,26 @@ test('shared cruise workflow enforces cabin capacity, event limits and role owne
   const admin = client(), planner = client(), otherPlanner = client(), guestA = client(), guestB = client(), extra = client();
   const login = (client, email, code, expected) => client('login', {email, code}, expected);
   const register = (client, token, name, expected) =>
-    client('register', {token, email: name.toLowerCase() + '@example.test', name, code: '123456'}, expected);
+    client('register', {token, email: name.toLowerCase() + '@example.test', name}, expected);
   const invite = url => new URLSearchParams(new URL(url).hash.split('?')[1]).get('kod');
   await login(admin, 'admin@example.test', 'crew-admin-demo');
   const {voyage} = await admin('createVoyage', {name: 'Rejs testowy', timeZone: 'Europe/Warsaw'});
   const {cabins: [cabin]} = await admin('addCabin', {label: '101', capacity: 2, voyageId: voyage.id});
+  const batch = {voyageId: voyage.id, capacity: 3};
+  await admin('addCabins', {...batch, labels: 'A12, 101'}, 409);
+  await admin('addCabins', {...batch, labels: '102-105, 104'}, 400);
+  await admin('addCabins', {...batch, labels: '300-700'}, 400);
+  const added = await admin('addCabins', {...batch, labels: '002–004\nA12, 106'});
+  assert.equal(added.addedCabins, 5);
+  assert.deepEqual(added.cabins.slice(1).map(item => [item.label, item.capacity]),
+    [['002', 3], ['003', 3], ['004', 3], ['A12', 3], ['106', 3]]);
   const {print: first} = await admin('issueQr', {id: cabin.id});
   assert.match(first.image, /^data:image\/gif;base64,/);
   const firstToken = invite(first.url);
   assert.equal((await guestA('?invite=' + firstToken)).cabin, '101');
   assert.equal((await register(guestA, firstToken, 'Ala')).user.cabin, '101');
+  await register(extra, firstToken, 'Ala', 409);
+  assert.equal((await extra()).user, null);
   const {print: renewed} = await admin('issueQr', {id: cabin.id});
   await guestB('?invite=' + firstToken, undefined, 404);
   const renewedToken = invite(renewed.url);
