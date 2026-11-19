@@ -1,4 +1,12 @@
 const crew = ['Marek Nowak', 'Anna Kowalska', 'Piotr Zieliński'];
+const crewProfiles = [
+  {name: crew[0], role: 'Marynarz pokładowy', initials: 'MN', color: 'teal',
+    bio: 'Chętnie zagram mecz FIFA albo zorganizuję wieczór z planszówkami.', interests: ['FIFA', 'Planszówki']},
+  {name: crew[1], role: 'Oficer wachtowy', initials: 'AK', color: 'plum',
+    bio: 'Szukam towarzystwa do wspólnych treningów i rozmów przy kawie.', interests: ['Trening', 'Kawa']},
+  {name: crew[2], role: 'Mechanik', initials: 'PZ', color: 'blue',
+    bio: 'Po wachcie najchętniej oglądam filmy albo gram w szachy.', interests: ['Filmy', 'Szachy']}
+];
 const storageKey = 'crewconnect-v1';
 const dateValue = (offset = 0) => {
   const date = new Date();
@@ -114,16 +122,65 @@ function eventCard(event) {
   </article>`;
 }
 
+function renderCrew() {
+  const choices = state.crewChoices?.[state.member] ?? {};
+  const others = crewProfiles.filter(profile => profile.name !== state.member);
+  const matches = others.filter(profile => choices[profile.name] === 'connect' &&
+    state.crewChoices?.[profile.name]?.[state.member] === 'connect');
+  const candidate = others.find(profile => !choices[profile.name]);
+  const card = candidate ? `
+    <article class="crew-card" id="crew-card" data-profile="${escape(candidate.name)}">
+      <div class="crew-portrait ${candidate.color}"><span aria-hidden="true">${candidate.initials}</span></div>
+      <div class="crew-details">
+        <h2>${escape(candidate.name)}</h2>
+        <p class="muted">${escape(candidate.role)}</p>
+        <p>${escape(candidate.bio)}</p>
+        <div class="crew-interests">${candidate.interests.map(interest => `<span>${escape(interest)}</span>`).join('')}</div>
+      </div>
+    </article>
+    <div class="crew-actions">
+      <button class="secondary" data-action="crew-skip" data-profile="${escape(candidate.name)}">Pomiń</button>
+      <button class="primary" data-action="crew-connect" data-profile="${escape(candidate.name)}">Chcę poznać</button>
+    </div>
+    <p class="crew-hint muted">Przesuń kartę w lewo, aby pominąć, lub w prawo, aby poznać.</p>` : `
+    <div class="card crew-empty"><h2>Wszystkie karty przejrzane</h2>
+    ${Object.values(choices).includes('skip') ? '<button class="secondary" data-action="crew-revisit">Pokaż pominięte osoby</button>' : ''}</div>`;
+  return `<header class="crew-heading"><h1>Poznaj załogę</h1><p class="muted">Znajdź osoby, z którymi chcesz spędzić czas po wachcie.</p></header>
+    <div class="crew-layout"><section aria-label="Profile załogi">${card}</section>
+      <aside class="card crew-matches"><h2>Dopasowania</h2>
+        ${matches.length ? matches.map(profile => `<div class="crew-match">
+          <span class="crew-avatar ${profile.color}" aria-hidden="true">${profile.initials}</span>
+          <div><strong>${escape(profile.name)}</strong><p class="muted">${escape(profile.role)}</p></div>
+        </div>`).join('') : '<p class="muted">Dopasowanie pojawi się, gdy obie osoby wybiorą „Chcę poznać”.</p>'}
+      </aside></div>`;
+}
+
+function chooseCrewProfile(profile, choice) {
+  if (!crew.includes(profile) || profile === state.member) return;
+  if (!state.crewChoices) state.crewChoices = {};
+  if (!state.crewChoices[state.member]) state.crewChoices[state.member] = {};
+  const choices = state.crewChoices[state.member];
+  if (choices[profile]) return;
+  choices[profile] = choice;
+  const matched = choice === 'connect' && state.crewChoices[profile]?.[state.member] === 'connect';
+  save(matched ? 'Nowe dopasowanie: ' + profile : choice === 'connect' ? 'Zapisano zainteresowanie.' : 'Pominięto profil.');
+  (content.querySelector('[data-action="crew-skip"], [data-action="crew-revisit"]') || content.querySelector('h1'))?.focus();
+}
+
 function render() {
   const page = location.hash.slice(1);
   const reports = page === 'raporty';
   const calendar = page === 'kalendarz';
+  const discover = page === 'zaloga';
   document.querySelectorAll('[data-page]').forEach(link => {
-    if (link.dataset.page === (calendar || reports ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
+    if (link.dataset.page === (calendar || reports || discover ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
   member.value = state.member;
-  if (calendar) {
+  if (discover) {
+    content.innerHTML = renderCrew();
+    content.querySelector('h1').tabIndex = -1;
+  } else if (calendar) {
     content.innerHTML = renderCalendar();
   } else if (reports) {
     const ordered = [...state.reports].sort((a, b) => b.date.localeCompare(a.date));
@@ -244,6 +301,19 @@ content.addEventListener('click', e => {
   const button = e.target.closest('button[data-action]');
   if (!button) return;
   const {action, id} = button.dataset;
+  if (action === 'crew-skip' || action === 'crew-connect') {
+    chooseCrewProfile(button.dataset.profile, action === 'crew-connect' ? 'connect' : 'skip');
+    return;
+  }
+  if (action === 'crew-revisit') {
+    const choices = state.crewChoices[state.member];
+    for (const name of Object.keys(choices)) {
+      if (choices[name] === 'skip') delete choices[name];
+    }
+    save('Ponownie wyświetlono pominięte profile.');
+    content.querySelector('[data-action="crew-skip"]')?.focus();
+    return;
+  }
   const event = state.events.find(item => item.id === id);
   if (action === 'event') createEvent(button.dataset.day);
   if (action.startsWith('calendar-')) {
@@ -266,6 +336,38 @@ content.addEventListener('click', e => {
   }
   if (action === 'report') editReport(state.reports.find(item => item.id === id && item.owner === state.member));
 });
+let swipe;
+content.addEventListener('pointerdown', event => {
+  const card = event.target.closest('#crew-card');
+  if (!card || !event.isPrimary || event.button !== 0) return;
+  swipe = {card, pointer: event.pointerId, x: event.clientX, y: event.clientY};
+  card.setPointerCapture(event.pointerId);
+});
+
+content.addEventListener('pointermove', event => {
+  if (swipe?.pointer !== event.pointerId) return;
+  const dx = event.clientX - swipe.x;
+  const dy = event.clientY - swipe.y;
+  if (Math.abs(dx) <= Math.abs(dy)) return;
+  const shift = Math.max(-90, Math.min(90, dx));
+  swipe.card.style.transform = `translateX(${shift}px) rotate(${shift / 18}deg)`;
+});
+
+function finishSwipe(event) {
+  if (swipe?.pointer !== event.pointerId) return;
+  const {card, x, y} = swipe;
+  swipe = undefined;
+  card.style.transform = '';
+  const dx = event.clientX - x;
+  const dy = event.clientY - y;
+  if (event.type === 'pointerup' && card.isConnected && Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(dy) * 1.25) {
+    chooseCrewProfile(card.dataset.profile, dx > 0 ? 'connect' : 'skip');
+  }
+}
+content.addEventListener('pointerup', finishSwipe);
+content.addEventListener('pointercancel', finishSwipe);
+content.addEventListener('lostpointercapture', finishSwipe);
+
 member.addEventListener('change', () => {
   state.member = member.value;
   save();
