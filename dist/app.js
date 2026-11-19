@@ -52,10 +52,11 @@ const apiBase = document.querySelector('meta[name="crewconnect-api"]')?.content;
 const workspaceUrl = apiBase ? new URL('/api/workspace', apiBase).href : 'api/workspace';
 const tokenKey = 'crewconnect-workspace-token:' + workspaceUrl;
 let syncing;
+let changingProfileSession = false;
 
 async function syncWorkspace() {
   if (syncing) return syncing;
-  if (!navigator.onLine) return;
+  if (!navigator.onLine || changingProfileSession) return;
   syncing = performWorkspaceSync();
   try {
     await syncing;
@@ -235,7 +236,7 @@ function renderUserProfile() {
         <footer>
           <button class="primary" data-action="profile-edit">${profile ? 'Edytuj profil' : 'Utwórz profil'}</button>
           ${apiBase ? '' : profile ? '<button class="secondary" data-action="profile-logout">Wyloguj się</button>' :
-            '<button class="secondary" data-action="profile-login">Zaloguj się kodem</button>'}
+            '<button class="secondary" data-action="profile-login">Zaloguj się</button>'}
         </footer>
       </div>
     </article>
@@ -658,18 +659,45 @@ function openForm(name, fields, submitLabel, onSubmit) {
       submit.disabled = false;
     }
   };
-  dialog.showModal();
+  if (!dialog.open) dialog.showModal();
+  dialog.querySelector('[autofocus]')?.focus();
 }
 
-async function accountSession(action, code) {
-  const response = await fetch(workspaceUrl, {
-    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action, code})
-  });
-  if (!response.ok) {
-    throw new Error(response.status === 401 && action === 'login' ? 'Kod jest nieprawidłowy lub został już użyty.' :
-      'Operacja się nie powiodła. Sprawdź połączenie i spróbuj ponownie.');
+async function accountSession(action, data) {
+  const errors = {
+    400: 'Sprawdź wpisane dane.',
+    409: 'Zapisz profil i spróbuj ponownie.',
+    401: {
+      requestLoginCode: 'Użyj adresu e-mail i przeglądarki, w której nastąpiło wylogowanie.',
+      login: 'Kod jest nieprawidłowy lub wygasł. Wróć do poprzedniego kroku, aby pobrać nowy kod.',
+      logout: 'Odśwież stronę i spróbuj ponownie.'
+    }[action]
+  };
+  let response;
+  try {
+    response = await fetch(workspaceUrl, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action, ...data})
+    });
+  } catch {
+    throw new Error('Sprawdź połączenie i spróbuj ponownie.');
   }
+  if (!response.ok) throw new Error(errors[response.status] || 'Logowanie demo jest chwilowo niedostępne.');
   return response;
+}
+
+async function restoreProfile(data) {
+  changingProfileSession = true;
+  try {
+    if (syncing) await syncing;
+    const response = await accountSession('login', data);
+    state = await response.json();
+    localStorage.removeItem(pendingKey);
+    localStorage.setItem(storageKey, JSON.stringify(state));
+    refreshPage();
+    announce('Przywrócono Twój profil.');
+  } finally {
+    changingProfileSession = false;
+  }
 }
 
 function resetProfileSession() {
@@ -688,35 +716,62 @@ function resetProfileSession() {
 }
 
 function beginProfileLogout() {
-  const code = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, '0')).join('');
   openForm('Wyloguj się', `
-    <p>Zachowaj kod w bezpiecznym miejscu. Umożliwia jednorazowy powrót do Twojego profilu, także na innym urządzeniu.</p>
-    <label>Kod powrotu <input value="${code}" readonly autocomplete="off" spellcheck="false"></label>
-    <label><span><input type="checkbox" required> Zapisałem kod powrotu</span></label>`,
-    'Wyloguj się', async () => {
-      await syncWorkspace();
-      if (localStorage.getItem(pendingKey)) throw new Error('Najpierw zsynchronizuj dane. Sprawdź połączenie.');
-      await accountSession('logout', code);
-      resetProfileSession();
-      localStorage.setItem(logoutKey, crypto.randomUUID());
-      announce('Wylogowano.');
+    <p>Podaj adres e-mail, którego użyjesz do ponownego zalogowania w tej przeglądarce.</p>
+    <label>Adres e-mail <input name="email" type="email" autocomplete="email" required maxlength="120" autofocus></label>`,
+    'Wyloguj się', async (data, form) => {
+      const sync = syncWorkspace();
+      changingProfileSession = true;
+      try {
+        await sync;
+        if (localStorage.getItem(pendingKey)) throw new Error('Najpierw zsynchronizuj dane. Sprawdź połączenie.');
+        if (!dialog.open || !form.isConnected) return false;
+        await accountSession('logout', {email: data.get('email')});
+        resetProfileSession();
+        localStorage.setItem(logoutKey, crypto.randomUUID());
+        announce('Wylogowano.');
+      } finally {
+        changingProfileSession = false;
+      }
     });
 }
 
-function beginProfileLogin() {
-  openForm('Zaloguj się kodem', `
-    <label>Kod powrotu <input name="code" required maxlength="64" autocomplete="off" spellcheck="false"></label>`,
-    'Zaloguj się', async data => {
+function beginProfileLogin(email = '') {
+  openForm('Zaloguj się', `
+    <label>Adres e-mail <input name="email" type="email" autocomplete="email" required maxlength="120"
+      value="${escape(email)}" autofocus></label>
+    <p class="muted">W wersji demo kod pojawi się w powiadomieniu na ekranie.</p>
+    <button type="button" class="secondary" data-legacy-login>Użyj wcześniej zapisanego kodu powrotu</button>`,
+    'Pokaż kod demo', async (data, form) => {
+      const address = data.get('email').trim();
+      const response = await accountSession('requestLoginCode', {email: address});
+      const {code} = await response.json();
+      if (dialog.open && form.isConnected) enterProfileCode(address, code);
+      return false;
+    });
+  dialog.querySelector('[data-legacy-login]').onclick = beginLegacyLogin;
+}
+
+function enterProfileCode(email, code) {
+  openForm('Wpisz kod logowania', `
+    <p class="note" role="status">Twój kod demo to <strong>${escape(code)}</strong>. Jest ważny przez 10 minut.</p>
+    <label>Kod sześciocyfrowy <input name="code" inputmode="numeric" autocomplete="one-time-code"
+      required pattern="[0-9]{6}" maxlength="6" autofocus></label>
+    <button type="button" class="secondary" data-login-back>Wróć do adresu e-mail</button>`,
+    'Zaloguj się', data => restoreProfile({email, code: data.get('code')}));
+  dialog.querySelector('[data-login-back]').onclick = () => beginProfileLogin(email);
+}
+
+function beginLegacyLogin() {
+  openForm('Użyj kodu powrotu', `
+    <label>Zapisany kod powrotu <input name="code" required maxlength="64" autocomplete="off" spellcheck="false" autofocus></label>
+    <button type="button" class="secondary" data-login-back>Wróć do adresu e-mail</button>`,
+    'Zaloguj się', data => {
       const code = data.get('code').trim().toLowerCase();
       if (!/^[a-f0-9]{64}$/.test(code)) throw new Error('Wpisz 64-znakowy kod powrotu.');
-      if (syncing) await syncing;
-      const response = await accountSession('login', code);
-      state = await response.json();
-      localStorage.removeItem(pendingKey);
-      localStorage.setItem(storageKey, JSON.stringify(state));
-      render();
-      announce('Przywrócono Twój profil.');
+      return restoreProfile({code});
     });
+  dialog.querySelector('[data-login-back]').onclick = () => beginProfileLogin();
 }
 
 function editUserProfile(publishOnline = false) {
