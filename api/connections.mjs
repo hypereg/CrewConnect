@@ -36,6 +36,9 @@ export default async function connections(req, res) {
   const me = discoveryId(session);
   try {
     const db = await getDatabase();
+    if (await db.collection('workspaces').findOne({_id: session, archived: true}, {projection: {_id: 1}})) {
+      return send(res, 403, {error: 'Konto zostało wyłączone przez administratora.'});
+    }
     const profiles = db.collection('discovery_profiles');
     const matches = db.collection('discovery_matches');
     if (req.method === 'GET') {
@@ -44,7 +47,10 @@ export default async function connections(req, res) {
         if (!validId(peer) || peer === me) return send(res, 400, {error: 'Nieprawidłowa rozmowa.'});
         const match = await matches.findOne({_id: pair(me, peer), likes: {$all: [me, peer]}});
         if (!match) return send(res, 403, {error: 'Rozmowa wymaga obustronnego dopasowania.'});
-        return send(res, 200, {messages: match.messages ?? []});
+        return send(res, 200, {
+          messages: match.messages ?? [],
+          peerTyping: Number(match.typingUntil?.[peer] ?? 0) > Date.now()
+        });
       }
       const own = await profiles.findOne({_id: me});
       if (!own) return send(res, 200, {published: false, profiles: [], liked: [], matches: []});
@@ -88,13 +94,38 @@ export default async function connections(req, res) {
         });
       return send(res, 200, {ok: true});
     }
-    if (body.action === 'message') {
-      const text = typeof body.text === 'string' ? body.text.trim() : '';
+    const thread = {_id: id, likes: {$all: [me, peer]}};
+    const typingKey = 'typingUntil.' + me;
+    if (body.action === 'typing' && typeof body.active === 'boolean') {
+      const result = await matches.updateOne(thread, body.active ?
+        {$set: {[typingKey]: new Date(Date.now() + 6500)}} : {$unset: {[typingKey]: ''}});
+      return result.matchedCount ? send(res, 200, {ok: true}) :
+        send(res, 403, {error: 'Rozmowa wymaga obustronnego dopasowania.'});
+    }
+    const text = typeof body.text === 'string' ? body.text.trim() : '';
+    if (body.action === 'message' || body.action === 'editMessage') {
       if (!text || text.length > 500) return send(res, 400, {error: 'Wpisz wiadomość do 500 znaków.'});
-      const result = await matches.updateOne({_id: id, likes: {$all: [me, peer]}},
-        {$push: {messages: {$each: [{id: randomUUID(), sender: me, text, at: new Date()}], $slice: -100}}});
+    }
+    if (body.action === 'message') {
+      const result = await matches.updateOne(thread,
+        {$push: {messages: {$each: [{id: randomUUID(), sender: me, text, at: new Date()}], $slice: -100}},
+          $unset: {[typingKey]: ''}});
       if (!result.matchedCount) return send(res, 403, {error: 'Rozmowa wymaga obustronnego dopasowania.'});
       return send(res, 200, {ok: true});
+    }
+    if (body.action === 'editMessage' || body.action === 'deleteMessage') {
+      if (typeof body.messageId !== 'string' || !/^[a-f0-9-]{36}$/.test(body.messageId)) {
+        return send(res, 400, {error: 'Nieprawidłowa wiadomość.'});
+      }
+      const target = {id: body.messageId, sender: me, deletedAt: {$exists: false}};
+      const update = body.action === 'editMessage' ?
+        {$set: {'messages.$[target].text': text, 'messages.$[target].editedAt': new Date()}, $unset: {[typingKey]: ''}} :
+        {$set: {'messages.$[target].deletedAt': new Date()}, $unset: {'messages.$[target].text': '', [typingKey]: ''}};
+      const result = await matches.updateOne({...thread, messages: {$elemMatch: target}}, update, {
+        arrayFilters: [{'target.id': target.id, 'target.sender': target.sender, 'target.deletedAt': target.deletedAt}]
+      });
+      return result.matchedCount ? send(res, 200, {ok: true}) :
+        send(res, 404, {error: 'Możesz zmieniać tylko własne, nieusunięte wiadomości.'});
     }
     return send(res, 400, {error: 'Nieznana operacja.'});
   } catch (error) {

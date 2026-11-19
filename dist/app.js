@@ -47,14 +47,16 @@ const publishEvent = event => updateSharedEvent({
   ...event, capacity: event.capacity ?? 30, action: 'publish', displayName: personalName(event.owner)
 }, 'Wydarzenie jest widoczne na tablicy załogi.');
 const pendingKey = 'crewconnect-workspace-pending';
+const logoutKey = 'crewconnect-session-ended';
 const apiBase = document.querySelector('meta[name="crewconnect-api"]')?.content;
 const workspaceUrl = apiBase ? new URL('/api/workspace', apiBase).href : 'api/workspace';
 const tokenKey = 'crewconnect-workspace-token:' + workspaceUrl;
 let syncing;
+let changingProfileSession = false;
 
 async function syncWorkspace() {
   if (syncing) return syncing;
-  if (!navigator.onLine) return;
+  if (!navigator.onLine || changingProfileSession) return;
   syncing = performWorkspaceSync();
   try {
     await syncing;
@@ -68,6 +70,11 @@ async function performWorkspaceSync() {
     let token = localStorage.getItem(tokenKey);
     const headers = () => token ? {Authorization: 'Bearer ' + token} : {};
     const response = await fetch(workspaceUrl, {cache: 'no-store', headers: headers()});
+    if (response.status === 403 && !apiBase) {
+      resetProfileSession();
+      announce('Konto jest niedostępne. Skontaktuj się z administratorem.');
+      return;
+    }
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return;
     const issuedToken = response.headers.get('X-Workspace-Token');
     if (issuedToken) {
@@ -233,6 +240,8 @@ function renderUserProfile() {
         ${profile ? profileDetails(profile) : '<h2>Przedstaw się załodze</h2><p class="muted">Wybierz nazwę i dodaj kilka słów o sobie.</p>'}
         <footer>
           <button class="primary" data-action="profile-edit">${profile ? 'Edytuj profil' : 'Utwórz profil'}</button>
+          ${apiBase ? '' : profile ? '<button class="secondary" data-action="profile-logout">Wyloguj się</button>' :
+            '<button class="secondary" data-action="profile-login">Zaloguj się</button>'}
         </footer>
       </div>
     </article>
@@ -391,9 +400,19 @@ function openCrewChat(profile, celebrate = false) {
     </div>
     <div data-chat ${celebrate ? 'hidden' : ''}>
       <div class="chat-messages" role="log" aria-label="Historia wiadomości"></div>
+      <p class="chat-typing" role="status"></p>
       <form class="chat-compose">
-        <label>Wiadomość <textarea name="message" rows="2" maxlength="500" required></textarea></label>
-        <button type="submit" class="primary">Wyślij</button>
+        <div class="chat-edit" hidden><strong>Edytujesz wiadomość</strong><button type="button" class="secondary" data-chat-cancel>Anuluj</button></div>
+        <label>Wiadomość <textarea name="message" rows="2" maxlength="500" required aria-describedby="chat-shortcuts"></textarea></label>
+        <div class="chat-toolbar">
+          <button type="button" class="secondary" data-emoji-toggle aria-expanded="false" aria-controls="chat-emoji">😊 Emoji</button>
+          <button type="submit" class="primary">Wyślij</button>
+        </div>
+        <div class="chat-emoji" id="chat-emoji" aria-label="Wybierz emoji" hidden>
+          ${['😀','😂','🥰','😍','😉','😎','🙌','👍','♥️','🔥','🎉','⚓','🌊','☕','🎮','💬'].map(emoji =>
+            `<button type="button" data-emoji="${emoji}">${emoji}</button>`).join('')}
+        </div>
+        <small class="muted" id="chat-shortcuts">Enter wysyła. Shift + Enter dodaje nową linię.</small>
       </form>
     </div>`;
   dialog.setAttribute('aria-labelledby', 'dialog-title');
@@ -401,16 +420,106 @@ function openCrewChat(profile, celebrate = false) {
   const history = dialog.querySelector('.chat-messages');
   const form = dialog.querySelector('.chat-compose');
   const input = form.elements.message;
+  const submit = form.querySelector('[type=submit]');
+  const typing = dialog.querySelector('.chat-typing');
+  const emojiToggle = form.querySelector('[data-emoji-toggle]');
+  const emojiPanel = form.querySelector('.chat-emoji');
   let remoteMessages = [];
-  function renderMessages() {
-    const messages = remoteMessages;
-    history.innerHTML = messages.map(message => `
-      <article class="chat-message${message.sender === author ? ' own' : ''}">
-        <span class="chat-meta">${message.sender === author ? 'Ty' : name} · ${chatTime.format(new Date(message.at))}</span>
-        <p>${escape(message.text)}</p>
-      </article>`).join('') || '<p class="muted">Wyślij pierwszą wiadomość.</p>';
-    history.scrollTop = history.scrollHeight;
+  let editing;
+  let draft = '';
+  let lastTyping = 0;
+  let typingActive = false;
+
+  function setEmojiPanel(open) {
+    emojiPanel.hidden = !open;
+    emojiToggle.setAttribute('aria-expanded', String(open));
   }
+
+  function updateTyping(active) {
+    const now = Date.now();
+    if (active && now - lastTyping < 2200) return;
+    if (!active && !typingActive) return;
+    typingActive = active;
+    lastTyping = active ? now : 0;
+    void discoveryRequest({action: 'typing', peer: profile, active}).catch(() => {});
+  }
+
+  function renderMessages() {
+    const nearBottom = history.scrollHeight - history.scrollTop - history.clientHeight < 70;
+    const focused = history.contains(document.activeElement) ? document.activeElement : null;
+    const focusedId = focused?.dataset.chatId;
+    const focusedAction = focused?.dataset.chatAction;
+    history.innerHTML = remoteMessages.map(message => {
+      const own = message.sender === author;
+      return `<article class="chat-message${own ? ' own' : ''}${message.deletedAt ? ' removed' : ''}">
+        <span class="chat-meta">${own ? 'Ty' : name} · ${chatTime.format(new Date(message.at))}${!message.deletedAt && message.editedAt ? ' · Edytowano' : ''}</span>
+        <p>${message.deletedAt ? 'Wiadomość usunięta' : escape(message.text)}</p>
+        ${own && !message.deletedAt ? `<div class="chat-message-actions">
+          <button type="button" data-chat-action="edit" data-chat-id="${escape(message.id)}">Edytuj</button>
+          <button type="button" data-chat-action="delete" data-chat-id="${escape(message.id)}">Usuń</button>
+        </div>` : ''}
+      </article>`;
+    }).join('') || '<p class="muted">Wyślij pierwszą wiadomość.</p>';
+    if (nearBottom) history.scrollTop = history.scrollHeight;
+    if (focusedId) [...history.querySelectorAll('[data-chat-id]')].find(button =>
+      button.dataset.chatId === focusedId && button.dataset.chatAction === focusedAction)?.focus({preventScroll: true});
+  }
+
+  function closeEdit() {
+    editing = undefined;
+    form.querySelector('.chat-edit').hidden = true;
+    submit.textContent = 'Wyślij';
+    input.value = draft;
+    draft = '';
+    input.focus();
+  }
+
+  form.querySelector('[data-chat-cancel]').onclick = () => { if (!submit.disabled) closeEdit(); };
+  emojiToggle.onclick = () => setEmojiPanel(emojiPanel.hidden);
+  emojiPanel.onclick = event => {
+    const emoji = event.target.closest('[data-emoji]')?.dataset.emoji;
+    if (!emoji) return;
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    if (input.value.length - (end - start) + emoji.length > input.maxLength) return;
+    input.setRangeText(emoji, start, end, 'end');
+    setEmojiPanel(false);
+    input.focus();
+    updateTyping(true);
+  };
+  input.addEventListener('input', () => updateTyping(Boolean(input.value.trim())));
+  input.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || event.shiftKey || event.isComposing || event.keyCode === 229) return;
+    event.preventDefault();
+    form.requestSubmit();
+  });
+  history.onclick = async event => {
+    if (submit.disabled) return;
+    const button = event.target.closest('[data-chat-action]');
+    const message = remoteMessages.find(item => item.id === button?.dataset.chatId && item.sender === author && !item.deletedAt);
+    if (!message) return;
+    if (button.dataset.chatAction === 'edit') {
+      if (!editing) draft = input.value;
+      editing = message.id;
+      input.value = message.text;
+      form.querySelector('.chat-edit').hidden = false;
+      submit.textContent = 'Zapisz zmiany';
+      input.focus();
+      return;
+    }
+    if (!window.confirm('Usunąć tę wiadomość z rozmowy?')) return;
+    button.disabled = true;
+    try {
+      await discoveryRequest({action: 'deleteMessage', peer: profile, messageId: message.id});
+      if (editing === message.id) closeEdit();
+      await reloadMessages();
+    } catch (error) {
+      announce(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  };
+
   const showChat = () => {
     if (!dialog.open || !form.isConnected) return;
     dialog.querySelector('.match-celebration').hidden = true;
@@ -424,8 +533,11 @@ function openCrewChat(profile, celebrate = false) {
     if (chatLoading || !dialog.open || !form.isConnected) return;
     chatLoading = true;
     try {
-      const {messages} = await discoveryRequest(null, profile);
-      if (form.isConnected && JSON.stringify(messages) !== JSON.stringify(remoteMessages)) {
+      const {messages, peerTyping} = await discoveryRequest(null, profile);
+      if (!form.isConnected) return;
+      const status = peerTyping ? peerName + ' pisze…' : '';
+      if (typing.textContent !== status) typing.textContent = status;
+      if (JSON.stringify(messages) !== JSON.stringify(remoteMessages)) {
         remoteMessages = messages;
         renderMessages();
       }
@@ -435,16 +547,18 @@ function openCrewChat(profile, celebrate = false) {
       chatLoading = false;
     }
   }
-  const pollChat = setInterval(reloadMessages, 3000);
+  const pollChat = setInterval(reloadMessages, 1500);
   form.onsubmit = async event => {
     event.preventDefault();
     const text = input.value.trim();
-    const submit = form.querySelector('[type=submit]');
     if (!text || text.length > 500 || submit.disabled) return;
     submit.disabled = true;
     try {
-      await discoveryRequest({action: 'message', peer: profile, text});
-      input.value = '';
+      await discoveryRequest({action: editing ? 'editMessage' : 'message', peer: profile, messageId: editing, text});
+      if (editing) closeEdit();
+      else input.value = '';
+      updateTyping(false);
+      setEmojiPanel(false);
       await reloadMessages();
     } catch (error) {
       announce(error.message);
@@ -456,6 +570,7 @@ function openCrewChat(profile, celebrate = false) {
   dialog.querySelector('[data-start-chat]').onclick = showChat;
   dialog.addEventListener('close', () => {
     clearInterval(pollChat);
+    updateTyping(false);
     dialog.classList.remove('crew-chat-dialog');
     [...content.querySelectorAll('[data-action="crew-chat"]')].find(button => button.dataset.profile === profile)?.focus();
   }, {once: true});
@@ -482,15 +597,21 @@ function render() {
   const calendar = page === 'kalendarz';
   const discover = page === 'zaloga';
   const profile = page === 'profil';
+  const administration = page === 'administracja';
+  const restaurants = page === 'restauracje';
   const map = page === 'mapa';
   content.classList.toggle('map-content', map);
   document.querySelectorAll('[data-page]').forEach(link => {
-    if (link.dataset.page === (calendar || reports || discover || profile || map ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
+    if (link.dataset.page === (calendar || reports || discover || profile || map || administration || restaurants ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
   activatePersonalProfile();
   updateNetwork();
-  if (map) {
+  if (restaurants) {
+    content.innerHTML = renderRestaurants();
+  } else if (administration) {
+    content.innerHTML = renderUserAdministration();
+  } else if (map) {
     if (!content.querySelector('.ship-map-frame')) {
       content.innerHTML = '<iframe class="ship-map-frame" title="Mapa statku" src="navigation.html?embed=1"></iframe>';
     }
@@ -549,7 +670,208 @@ function openForm(name, fields, submitLabel, onSubmit) {
       submit.disabled = false;
     }
   };
-  dialog.showModal();
+  if (!dialog.open) dialog.showModal();
+  dialog.querySelector('[autofocus]')?.focus();
+}
+
+async function accountSession(action, data) {
+  const errors = {
+    400: 'Sprawdź wpisane dane.',
+    409: 'Zapisz profil i spróbuj ponownie.',
+    401: {
+      requestLoginCode: 'Użyj adresu e-mail i przeglądarki, w której nastąpiło wylogowanie.',
+      login: 'Kod jest nieprawidłowy lub wygasł. Wróć do poprzedniego kroku, aby pobrać nowy kod.',
+      logout: 'Odśwież stronę i spróbuj ponownie.'
+    }[action]
+  };
+  let response;
+  try {
+    response = await fetch(workspaceUrl, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action, ...data})
+    });
+  } catch {
+    throw new Error('Sprawdź połączenie i spróbuj ponownie.');
+  }
+  if (!response.ok) throw new Error(errors[response.status] || 'Logowanie demo jest chwilowo niedostępne.');
+  return response;
+}
+
+async function restoreProfile(data) {
+  changingProfileSession = true;
+  try {
+    if (syncing) await syncing;
+    const response = await accountSession('login', data);
+    state = await response.json();
+    localStorage.removeItem(pendingKey);
+    localStorage.setItem(storageKey, JSON.stringify(state));
+    refreshPage();
+    announce('Przywrócono Twój profil.');
+  } finally {
+    changingProfileSession = false;
+  }
+}
+
+function resetProfileSession() {
+  localStorage.removeItem(storageKey);
+  localStorage.removeItem(pendingKey);
+  localStorage.removeItem(tokenKey);
+  clearDutySession();
+  schedule = null;
+  scheduleError = null;
+  onlineDiscovery = undefined;
+  onlineSearch = '';
+  onlineError = '';
+  skippedOnline.clear();
+  restaurantBoard = undefined;
+  state = {member: '', events: [], reports: []};
+  render();
+}
+
+function beginProfileLogout() {
+  openForm('Wyloguj się', `
+    <p>Podaj adres e-mail, którego użyjesz do ponownego zalogowania w tej przeglądarce.</p>
+    <label>Adres e-mail <input name="email" type="email" autocomplete="email" required maxlength="120" autofocus></label>`,
+    'Wyloguj się', async (data, form) => {
+      const sync = syncWorkspace();
+      changingProfileSession = true;
+      try {
+        await sync;
+        if (localStorage.getItem(pendingKey)) throw new Error('Najpierw zsynchronizuj dane. Sprawdź połączenie.');
+        if (!dialog.open || !form.isConnected) return false;
+        await accountSession('logout', {email: data.get('email')});
+        resetProfileSession();
+        localStorage.setItem(logoutKey, crypto.randomUUID());
+        announce('Wylogowano.');
+      } finally {
+        changingProfileSession = false;
+      }
+    });
+}
+
+function beginProfileLogin(email = '') {
+  openForm('Zaloguj się', `
+    <label>Adres e-mail <input name="email" type="email" autocomplete="email" required maxlength="120"
+      value="${escape(email)}" autofocus></label>
+    <p class="muted">W wersji demo kod pojawi się w powiadomieniu na ekranie.</p>
+    <button type="button" class="secondary" data-legacy-login>Użyj kodu powrotu lub kodu od administratora</button>`,
+    'Pokaż kod demo', async (data, form) => {
+      const address = data.get('email').trim();
+      const response = await accountSession('requestLoginCode', {email: address});
+      const {code} = await response.json();
+      if (dialog.open && form.isConnected) enterProfileCode(address, code);
+      return false;
+    });
+  dialog.querySelector('[data-legacy-login]').onclick = beginLegacyLogin;
+}
+
+function enterProfileCode(email, code) {
+  openForm('Wpisz kod logowania', `
+    <p class="note" role="status">Twój kod demo to <strong>${escape(code)}</strong>. Jest ważny przez 10 minut.</p>
+    <label>Kod sześciocyfrowy <input name="code" inputmode="numeric" autocomplete="one-time-code"
+      required pattern="[0-9]{6}" maxlength="6" autofocus></label>
+    <button type="button" class="secondary" data-login-back>Wróć do adresu e-mail</button>`,
+    'Zaloguj się', data => restoreProfile({email, code: data.get('code')}));
+  dialog.querySelector('[data-login-back]').onclick = () => beginProfileLogin(email);
+}
+
+function beginLegacyLogin() {
+  openForm('Zaloguj się zapisanym kodem', `
+    <label>Kod dostępu <input name="code" required maxlength="64" autocomplete="off" spellcheck="false" autofocus></label>
+    <button type="button" class="secondary" data-login-back>Wróć do adresu e-mail</button>`,
+    'Zaloguj się', data => {
+      const code = data.get('code').trim().toLowerCase();
+      if (!/^[a-f0-9]{64}$/.test(code)) throw new Error('Wpisz 64-znakowy kod powrotu.');
+      return restoreProfile({code});
+    });
+  dialog.querySelector('[data-login-back]').onclick = () => beginProfileLogin();
+}
+
+let adminKey = '';
+let adminUsers = [];
+let newUserCode = '';
+
+async function adminRequest(payload, key = adminKey) {
+  const response = await fetch('api/users', {
+    method: payload ? 'POST' : 'GET',
+    headers: {Authorization: 'Bearer ' + key, ...(payload ? {'Content-Type': 'application/json'} : {})},
+    ...(payload ? {body: JSON.stringify(payload)} : {})
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'Panel jest chwilowo niedostępny.');
+  return result;
+}
+
+function renderUserAdministration() {
+  const heading = '<header class="crew-heading"><h1>Administracja użytkowników</h1></header>';
+  if (!adminKey) return heading + '<section class="card"><p>Odblokuj panel kluczem administratora.</p>' +
+    '<button class="primary" data-action="admin-unlock">Odblokuj panel</button></section>';
+  return heading + `
+    <div class="crew-filter"><button class="primary" data-action="admin-create">+ Dodaj użytkownika</button>
+      <button class="secondary" data-action="admin-lock">Zablokuj panel</button></div>
+    ${newUserCode ? `<section class="card"><h2>Kod logowania użytkownika</h2>
+      <p>Przekaż go prywatnie. Użytkownik wpisze go po wybraniu „Zaloguj się kodem”.</p>
+      <input aria-label="Jednorazowy kod logowania" value="${newUserCode}" readonly>
+      <button class="secondary" data-action="admin-dismiss-code">Ukryj kod</button></section>` : ''}
+    <div class="grid">${adminUsers.map(user => `<article class="card">
+      <p class="badge">${user.archived ? 'Konto wyłączone' : user.published ? 'Profil opublikowany' : 'Bez publicznej karty'}</p>
+      <h3>${escape(user.name)}</h3>${user.role ? `<p class="muted">${escape(user.role)}</p>` : ''}
+      <footer>${user.archived ? `<button class="primary" data-action="admin-restore" data-id="${user.id}">Przywróć konto</button>` :
+        `<button class="secondary" data-action="admin-${user.published ? 'hide' : 'publish'}" data-id="${user.id}">${user.published ? 'Ukryj kartę' : 'Opublikuj kartę'}</button>
+        <button class="secondary" data-action="admin-resetCode" data-id="${user.id}">Wydaj kod logowania</button>
+        <button class="secondary" data-action="admin-archive" data-id="${user.id}">Usuń z aktywnych</button>`}</footer></article>`).join('') ||
+      '<p>Brak użytkowników.</p>'}</div>`;
+}
+
+async function handleUserAdministration(action, id) {
+  if (action === 'admin-unlock') {
+    openForm('Dostęp administratora',
+      '<label>Klucz administratora <input type="password" name="key" required maxlength="64" autocomplete="off"></label>',
+      'Odblokuj', async data => {
+        const key = data.get('key').trim();
+        const result = await adminRequest(null, key);
+        adminKey = key;
+        adminUsers = result.users;
+        render();
+      });
+    return;
+  }
+  if (!adminKey) return;
+  if (action === 'admin-create') {
+    openForm('Dodaj użytkownika', '<label>Nazwa <input name="name" required maxlength="80"></label>' +
+      '<label>Rola na pokładzie <input name="role" maxlength="60"></label>', 'Dodaj konto', async data => {
+        const result = await adminRequest({action: 'create', name: data.get('name'), role: data.get('role')});
+        newUserCode = result.code;
+        adminUsers = (await adminRequest()).users;
+        render();
+      });
+    return;
+  }
+  if (action === 'admin-lock') {
+    adminKey = '';
+    adminUsers = [];
+    newUserCode = '';
+    render();
+    return;
+  }
+  if (action === 'admin-dismiss-code') {
+    newUserCode = '';
+    render();
+    return;
+  }
+  const operation = action.slice('admin-'.length);
+  const questions = {archive: 'Wyłączyć to konto i ukryć jego kartę? Rozmowy zostaną w bazie.',
+    publish: 'Opublikować kartę tej osoby w „Poznaj załogę”? Zrób to tylko za jej zgodą.',
+    resetCode: 'Wydać nowy kod logowania? Dotychczasowy niewykorzystany kod przestanie działać.'};
+  if (questions[operation] && !window.confirm(questions[operation])) return;
+  try {
+    const result = await adminRequest({action: operation, id});
+    if (result.code) newUserCode = result.code;
+    adminUsers = (await adminRequest()).users;
+    render();
+    announce('Zapisano zmianę konta.');
+  } catch (error) {
+    announce(error.message);
+  }
 }
 
 function editUserProfile(publishOnline = false) {
@@ -681,8 +1003,24 @@ content.addEventListener('click', e => {
   const button = e.target.closest('button[data-action]');
   if (!button) return;
   const {action, id} = button.dataset;
+  if (action.startsWith('restaurant-')) {
+    void handleRestaurantAction(action, id);
+    return;
+  }
+  if (action.startsWith('admin-')) {
+    void handleUserAdministration(action, id);
+    return;
+  }
   if (action === 'online-profile-edit') {
     editUserProfile(true);
+    return;
+  }
+  if (action === 'profile-logout' && state.userProfile) {
+    beginProfileLogout();
+    return;
+  }
+  if (action === 'profile-login' && !state.userProfile) {
+    beginProfileLogin();
     return;
   }
   if (action === 'profile-edit') {
@@ -851,6 +1189,7 @@ content.addEventListener('toggle', event => {
 
 function refreshPage() {
   render();
+  if (location.hash === '#restauracje') void loadRestaurants();
   void refreshDiscovery();
   if (isDutyPage() && state.userProfile) void loadDuties();
 }
@@ -862,6 +1201,11 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden && isDutyPage()) void loadDuties();
 });
 window.addEventListener('storage', event => {
+  if (event.key === logoutKey && event.newValue) {
+    if (dialog.open) dialog.close();
+    resetProfileSession();
+    return;
+  }
   if (event.key === storageKey && event.newValue) {
     state = JSON.parse(event.newValue);
     render();
@@ -897,6 +1241,7 @@ window.addEventListener('focus', refreshDiscovery);
 window.addEventListener('online', refreshDiscovery);
 setInterval(() => { if (!document.hidden) void refreshDiscovery(); }, 3000);
 window.addEventListener('online', refreshEvents);
+window.addEventListener('online', loadRestaurants);
 setInterval(() => { if (!document.hidden) void refreshEvents(); }, 15000);
 
 const mobileMenu = document.querySelector('.mobile-menu-toggle');

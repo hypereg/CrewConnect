@@ -31,6 +31,10 @@ Backend wymaga Node.js 22. Wspólny harmonogram wymaga MongoDB. Jeśli korzystas
 
 Domyślna baza to `crewconnect`, a kolekcja `workspaces` powstaje przy pierwszym zapisie. Losowy identyfikator w ciasteczku HttpOnly wiąże obszar roboczy z przeglądarką. W jednym obszarze profile demo współdzielą wydarzenia i raporty. Zmiany offline są przechowywane lokalnie i synchronizowane po odzyskaniu połączenia.
 
+### Ponowne logowanie do profilu
+
+Wybierz **Mój profil → Wyloguj się** i podaj testowy e-mail. Przy ponownym logowaniu w tej samej przeglądarce wpisz ten adres i wybierz **Pokaż kod demo**. Jednorazowy sześciocyfrowy kod pojawi się w powiadomieniu w oknie logowania. Jest ważny przez 10 minut. Aplikacja nie wysyła e-maili. Ta funkcja korzysta z serwera i MongoDB. Jeśli masz zapisany wcześniej 64-znakowy kod powrotu, możesz użyć go w oknie logowania.
+
 ## GitHub Pages i Atlas
 
 1. Wdróż backend Node.js na hostingu HTTPS z dostępem do Atlas. Ustaw sekret `MONGODB_URI`, opcjonalną nazwę bazy `MONGODB_DATABASE` oraz `FRONTEND_ORIGIN=https://hypereg.github.io`. Przy wdrożeniu dostarczanym przez platformę ustaw adres nasłuchu `HOST=0.0.0.0`.
@@ -61,6 +65,6 @@ Aby włączyć raporty głosowe na Vercel, ustaw tam również `CREW_PASSWORD` i
 
 ## Mapa statku dla gości
 
-W menu wybierz **Mapa statku**. Demo obejmuje 11 miejsc na pokładach 4–7 Wonder of the Seas. Mapa izometryczna pokazuje aktywny pokład i pobliski poziom, a podczas zmiany pokładu pokazuje poziom docelowy. Animowane strzałki prowadzą po korytarzach, windą lub schodami. Start wybiera się z listy lub wskazuje na mapie. Geometria korytarzy i odległości są poglądowe. [Plany Royal Caribbean](https://www.royalcaribbean.com/cruise-ships/wonder-of-the-seas/deck-plans)
+W menu wybierz **Mapa statku**. Demo obejmuje 11 miejsc na pokładach 4–7 Wonder of the Seas. Mapa izometryczna pokazuje plan wybranego pokładu oraz kadłub, którego wysokość odpowiada liczbie poziomów pod nim. Animowane strzałki prowadzą po korytarzach, windą lub schodami. Start wybiera się z listy lub wskazuje na mapie. Geometria korytarzy i odległości są poglądowe. [Plany Royal Caribbean](https://www.royalcaribbean.com/cruise-ships/wonder-of-the-seas/deck-plans)
 
 **Zarządzaj miejscami** pozwala dodawać, przesuwać i usuwać pinezki. Wejście można wybrać z listy lub wskazać na mapie, gdzie zostanie przypisane do najbliższego korytarza. Z `MONGODB_URI` katalog powstaje przy pierwszym odczycie w kolekcji `shipMaps`. Ustaw osobny sekret `MAP_ADMIN_PASSWORD`, aby zmiany administratora trafiały do bazy i były widoczne dla gości. W trybie demo edycje zapisują się lokalnie w przeglądarce.

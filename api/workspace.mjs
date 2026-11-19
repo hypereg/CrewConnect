@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { MongoClient } from 'mongodb';
 import { discoveryId, discoveryFields } from '../discovery-profile.mjs';
+import { accountSession, workspaceCookie, workspaceId } from '../workspace-session.mjs';
 
 const { MONGODB_URI, MONGODB_DATABASE = 'crewconnect', FRONTEND_ORIGIN } = process.env;
 let client;
@@ -40,21 +41,24 @@ export default async function workspace(req, res) {
     }
     res.setHeader('Vary', 'Origin');
     if (req.method === 'OPTIONS') return res.writeHead(crossOrigin ? 204 : 403).end();
-    if (!['GET', 'PUT'].includes(req.method)) return res.writeHead(405).end();
     res.setHeader('Cache-Control', 'no-store');
+    if (req.method === 'POST' && !crossOrigin) {
+      return await accountSession(req, res, () => workspaceDatabase().collection('workspaces'));
+    }
+    if (!['GET', 'PUT'].includes(req.method)) return res.writeHead(405).end();
     let id = crossOrigin ? req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1] :
-      req.headers.cookie?.match(/(?:^|; *)crew_workspace=([a-f0-9]{64})(?:;|$)/)?.[1];
+      workspaceId(req);
     if (!id) {
       if (req.method === 'PUT') return res.writeHead(401).end();
       id = randomBytes(32).toString('hex');
       if (crossOrigin) res.setHeader('X-Workspace-Token', id);
       else {
-        const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-        res.setHeader('Set-Cookie', `crew_workspace=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000${secure}`);
+        res.setHeader('Set-Cookie', workspaceCookie(id));
       }
     }
     if (req.method === 'GET') {
-      const workspace = await workspaceDatabase().collection('workspaces').findOne({_id: id}, {projection: {snapshot: 1}});
+      const workspace = await workspaceDatabase().collection('workspaces').findOne({_id: id}, {projection: {snapshot: 1, archived: 1}});
+      if (workspace?.archived) return res.writeHead(403).end();
       return res.writeHead(200, {'Content-Type': 'application/json'}).end(JSON.stringify(workspace?.snapshot ?? null));
     }
     if (req.headers['content-type']?.split(';')[0] !== 'application/json') return res.writeHead(415).end();
@@ -80,14 +84,15 @@ export default async function workspace(req, res) {
       return res.writeHead(400).end();
     }
     const db = workspaceDatabase();
-    const filter = {_id: id};
-    const previous = await db.collection('workspaces').findOne(filter, {projection: {'snapshot.userProfile': 1}});
+    const filter = {_id: id, archived: {$ne: true}};
+    const previous = await db.collection('workspaces').findOne({_id: id}, {projection: {'snapshot.userProfile': 1, archived: 1}});
+    if (previous?.archived) return res.writeHead(403).end();
     const updated = snapshot.userProfile;
     if (updated && JSON.stringify(previous?.snapshot?.userProfile) !== JSON.stringify(updated)) {
       await db.collection('discovery_profiles').updateOne({_id: discoveryId(id)}, {$set: discoveryFields(updated)});
     }
     await db.collection('workspaces').updateOne(
-      {_id: id},
+      filter,
       {$set: {snapshot, updatedAt: new Date()}},
       {upsert: true}
     );
