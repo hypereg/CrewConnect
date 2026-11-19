@@ -287,8 +287,7 @@ function renderUserProfile() {
 function renderCrew() {
   const choices = state.crewChoices?.[state.member] ?? {};
   const others = currentRoster().filter(profile => profileId(profile) !== state.member);
-  const matches = others.filter(profile => choices[profileId(profile)] === 'connect' &&
-    state.crewChoices?.[profileId(profile)]?.[state.member] === 'connect');
+  const matches = others.filter(profile => isCrewMatch(profileId(profile)));
   const visibleProfiles = others.filter(matchesDiscoveryFilters);
   const myInterests = currentRoster().find(profile => profileId(profile) === state.member)?.interests ?? [];
   const shared = profile => profile.interests.map(interestKey).filter(interest => myInterests.some(item => interestKey(item) === interest));
@@ -327,8 +326,85 @@ function renderCrew() {
         ${matches.length ? matches.map(profile => `<div class="crew-match">
           <span class="crew-avatar ${profile.color}" aria-hidden="true">${escape(profile.initials)}</span>
           <div><strong>${escape(profile.name)}</strong>${profile.role ? `<p class="muted">${escape(profile.role)}</p>` : ''}</div>
+          <button class="secondary" data-action="crew-chat" data-profile="${escape(profileId(profile))}" aria-label="Otwórz czat z ${escape(profile.name)}">Czat</button>
         </div>`).join('') : '<p class="muted">Dopasowanie pojawi się, gdy obie osoby wybiorą „Chcę poznać”.</p>'}
       </aside></div>`;
+}
+
+function isCrewMatch(profile, memberId = state.member) {
+  return profile !== memberId && state.crewChoices?.[memberId]?.[profile] === 'connect' &&
+    state.crewChoices?.[profile]?.[memberId] === 'connect';
+}
+
+const conversationKey = (first, second) => JSON.stringify([first, second].sort());
+const chatTime = new Intl.DateTimeFormat('pl-PL', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+
+function openCrewChat(profile, celebrate = false) {
+  const sender = state.member;
+  if (!isWorkspaceMember(profile) || !isCrewMatch(profile, sender) || dialog.open) return;
+  const key = conversationKey(sender, profile);
+  const name = escape(displayName(profile));
+  dialog.classList.add('crew-chat-dialog');
+  dialog.innerHTML = `
+    <div class="dialog-head"><h2 id="dialog-title">${celebrate ? 'Macie dopasowanie!' : 'Czat z ' + name}</h2>
+      <button type="button" data-close class="secondary" aria-label="Zamknij czat">✕</button></div>
+    <div class="match-celebration" ${celebrate ? '' : 'hidden'}>
+      <div class="match-hearts" aria-hidden="true"><span>♥</span><span>♥</span><span>♥</span><span>♥</span><span>♥</span></div>
+      <p>Ty i <strong>${name}</strong> chcecie się poznać.</p>
+      <button type="button" class="primary" data-start-chat>Otwórz czat</button>
+    </div>
+    <div data-chat ${celebrate ? 'hidden' : ''}>
+      <div class="chat-messages" role="log" aria-label="Historia wiadomości"></div>
+      <form class="chat-compose">
+        <label>Wiadomość <textarea name="message" rows="2" maxlength="500" required></textarea></label>
+        <button type="submit" class="primary">Wyślij</button>
+      </form>
+    </div>`;
+  dialog.setAttribute('aria-labelledby', 'dialog-title');
+  dialog.querySelector('[data-close]').onclick = () => dialog.close();
+  const history = dialog.querySelector('.chat-messages');
+  const form = dialog.querySelector('.chat-compose');
+  const input = form.elements.message;
+  function renderMessages() {
+    const messages = state.crewChats?.[key] ?? [];
+    history.innerHTML = messages.map(message => `
+      <article class="chat-message${message.sender === sender ? ' own' : ''}">
+        <span class="chat-meta">${message.sender === sender ? 'Ty' : name} · ${chatTime.format(new Date(message.at))}</span>
+        <p>${escape(message.text)}</p>
+      </article>`).join('') || '<p class="muted">Wyślij pierwszą wiadomość.</p>';
+    history.scrollTop = history.scrollHeight;
+  }
+  const showChat = () => {
+    if (!dialog.open || !form.isConnected) return;
+    dialog.querySelector('.match-celebration').hidden = true;
+    dialog.querySelector('[data-chat]').hidden = false;
+    dialog.querySelector('#dialog-title').textContent = 'Czat z ' + displayName(profile);
+    renderMessages();
+    input.focus();
+  };
+  form.onsubmit = event => {
+    event.preventDefault();
+    const text = input.value.trim();
+    if (!text || text.length > 500 || state.member !== sender || !isCrewMatch(profile, sender)) return;
+    if (!state.crewChats) state.crewChats = {};
+    const messages = state.crewChats[key] ?? [];
+    state.crewChats[key] = [...messages, {sender, text, at: new Date().toISOString()}];
+    save();
+    input.value = '';
+    renderMessages();
+    input.focus();
+  };
+  dialog.querySelector('[data-start-chat]').onclick = showChat;
+  const refresh = event => { if (event.key === storageKey && dialog.open && form.isConnected) renderMessages(); };
+  window.addEventListener('storage', refresh);
+  dialog.addEventListener('close', () => {
+    window.removeEventListener('storage', refresh);
+    dialog.classList.remove('crew-chat-dialog');
+    [...content.querySelectorAll('[data-action="crew-chat"]')].find(button => button.dataset.profile === profile)?.focus();
+  }, {once: true});
+  dialog.showModal();
+  if (celebrate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) setTimeout(showChat, 1500);
+  else showChat();
 }
 
 function chooseCrewProfile(profile, choice) {
@@ -338,8 +414,12 @@ function chooseCrewProfile(profile, choice) {
   const choices = state.crewChoices[state.member];
   if (choices[profile]) return;
   choices[profile] = choice;
-  const matched = choice === 'connect' && state.crewChoices[profile]?.[state.member] === 'connect';
+  const matched = isCrewMatch(profile);
   save(matched ? 'Nowe dopasowanie: ' + displayName(profile) : choice === 'connect' ? 'Zapisano zainteresowanie.' : 'Pominięto profil.');
+  if (matched) {
+    openCrewChat(profile, true);
+    return;
+  }
   (content.querySelector('[data-action="crew-skip"], [data-action="crew-revisit"]') || content.querySelector('h1'))?.focus();
 }
 
@@ -524,6 +604,10 @@ content.addEventListener('click', e => {
     state.member = state.userProfile.id;
     save('Wybrano Twój profil.');
     content.querySelector('[data-action="profile-edit"]')?.focus();
+    return;
+  }
+  if (action === 'crew-chat') {
+    openCrewChat(button.dataset.profile);
     return;
   }
   if (action === 'crew-skip' || action === 'crew-connect') {

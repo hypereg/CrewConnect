@@ -61,6 +61,7 @@ let noticeTimer;
 let operation = false;
 let refreshing = false;
 let requestVersion = 0;
+let chatPoll;
 
 function readLocal(key) {
   try { return localStorage.getItem(key); } catch { return null; }
@@ -129,7 +130,8 @@ async function request(payload, suffix = '') {
     method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload), cache: 'no-store'
   } : {cache: 'no-store'});
   const json = await response.json().catch(() => null);
-  if (!response.ok || !json) throw Object.assign(new Error(json?.error || 'Demo jest dostępne pod adresem serwera CrewConnect.'), {status: response.status});
+  if (!response.ok || !json) throw Object.assign(new Error(json?.error || 'Demo jest dostępne pod adresem serwera CrewConnect.'),
+    {status: response.status, code: json?.code});
   return json;
 }
 
@@ -154,6 +156,10 @@ async function refresh(force = false) {
   } catch (error) {
     if (version !== requestVersion) return;
     const cached = cachedBoard();
+    if (error.code === 'DEMO_NOT_CONFIGURED' && !cached && route().page !== 'rejestracja') {
+      location.replace(new URL('legacy.html' + location.hash, location.href));
+      return;
+    }
     if (cached) {
       board = cached.board;
       cachedAt = cached.at;
@@ -352,7 +358,9 @@ function renderPeople() {
           empty('Brak nowych kart', 'Nowe osoby pojawią się tutaj po włączeniu widoczności.')) +
         '</div>' + card('<h2>Dopasowania</h2>' + (matches.length ? '<ul class="matches">' + matches.map(profile =>
           '<li><span class="avatar">' + escape(initials(profile.name)) + '</span><div><strong>' + escape(profile.name) +
-          '</strong>' + (profile.bio ? '<p>' + escape(profile.bio) + '</p>' : '') + '</div></li>').join('') + '</ul>' :
+          '</strong>' + (profile.bio ? '<p>' + escape(profile.bio) + '</p>' : '') + '</div>' +
+          button('Czat', 'chat', profile.id, 'aria-label="Czat z ' + escape(profile.name) + '"', 'secondary') +
+          '</li>').join('') + '</ul>' :
           '<p>Dopasowanie pojawi się, gdy obie osoby wybiorą „Chcę poznać”.</p>')) + '</div>');
 }
 
@@ -491,7 +499,62 @@ dialog.addEventListener('click', event => {
   if (event.target.closest('[data-close]')) dialog.close();
   if (event.target.closest('[data-print]')) window.print();
 });
-dialog.addEventListener('close', () => { dialog.innerHTML = ''; });
+dialog.addEventListener('close', () => {
+  clearInterval(chatPoll);
+  dialog.innerHTML = '';
+});
+
+function openChat(id, newMatch = false) {
+  const person = board.profiles?.find(profile => profile.match && profile.id === id);
+  if (!person || offline || dialog.open) return;
+  const sender = board.user.id;
+  showResult(newMatch ? 'Macie dopasowanie!' : 'Czat z ' + escape(person.name),
+    (newMatch ? '<p>Ty i <strong>' + escape(person.name) + '</strong> chcecie się poznać.</p>' : '') +
+    '<div class="chat-log" role="log" aria-label="Historia wiadomości"></div>' +
+    form('sendMessage', textarea('Wiadomość', 'message', '', 'maxlength="500" required'), submit('Wyślij')));
+  const log = dialog.querySelector('.chat-log');
+  const chatForm = dialog.querySelector('form');
+  const send = chatForm.querySelector('button[type=submit]');
+  const failure = chatForm.querySelector('.form-error');
+  let lastMessage;
+  let loading = false;
+  async function load() {
+    if (loading) return;
+    loading = true;
+    try {
+      const {messages} = await request(null, '?chat=' + encodeURIComponent(id));
+      const latest = messages.at(-1)?.id || '';
+      if (!log.isConnected || latest === lastMessage) return;
+      lastMessage = latest;
+      log.innerHTML = messages.length ? messages.map(message => '<article class="chat-message' +
+        (message.from === sender ? ' own' : '') + '"><small>' + (message.from === sender ? 'Ty' : escape(person.name)) +
+        ' · ' + new Date(message.at).toLocaleString('pl-PL', {dateStyle: 'short', timeStyle: 'short'}) +
+        '</small><p>' + escape(message.text) + '</p></article>').join('') : '<p>Wyślij pierwszą wiadomość.</p>';
+      log.scrollTop = log.scrollHeight;
+    } catch (error) {
+      if (error.status === 404 && log.isConnected) {
+        log.textContent = error.message;
+        send.disabled = true;
+        clearInterval(chatPoll);
+      }
+    } finally { loading = false; }
+  }
+  chatForm.addEventListener('submit', event => {
+    event.preventDefault();
+    if (send.disabled) return;
+    send.disabled = true;
+    failure.hidden = true;
+    void request({action: 'sendMessage', id, message: chatForm.elements.message.value}).then(() => {
+      chatForm.reset();
+      return load();
+    }).catch(error => {
+      failure.textContent = error.status ? error.message : 'Połącz się z internetem, aby wysłać wiadomość.';
+      failure.hidden = false;
+    }).finally(() => { send.disabled = false; });
+  });
+  void load();
+  chatPoll = setInterval(load, 3500);
+}
 
 async function mutate(payload, {message, after, onError} = {}) {
   if (operation) return;
@@ -597,6 +660,7 @@ content.addEventListener('click', event => {
   }
   if (action === 'logout') return void logout();
   if (offline) return;
+  if (action === 'chat') return openChat(id);
   const confirms = {
     closeVoyage: 'Zakończyć rejs? Kody QR przestaną działać.',
     revokeQr: 'Unieważnić QR tej kabiny?',
@@ -610,7 +674,7 @@ content.addEventListener('click', event => {
     {action, id, ...(action === 'togglePlanner' && {active: control.dataset.active === 'true'})};
   const messages = {join: 'Zapisano na wydarzenie.', leave: 'Wypisano z wydarzenia.', closeVoyage: 'Rejs zakończony.',
     cancelEvent: 'Wydarzenie odwołane.', togglePlanner: 'Zapisano status konta.', revokeQr: 'Kod QR unieważniony.'};
-  void mutate(payload, {message: messages[action]});
+  void mutate(payload, {message: messages[action], after: action === 'connect' ? () => openChat(id, true) : undefined});
 });
 
 let swipe;

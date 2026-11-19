@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101c2d">
+<meta name="description" content="Aktywności i raporty obowiązków załogi na statku">
+<meta name="crewconnect-api" content="">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="stylesheet" href="style.css?v=16">
+<title>CrewConnect — Na pokładzie</title>
+</head>
+<body>
+<aside class="sidebar">
+  <a class="brand" href="#aktywnosci"><span class="logo" aria-hidden="true">⚓</span><span>Crew<span>Connect</span></span></a>
+  <nav aria-label="Menu główne">
+    <div class="nav-group" role="group" aria-labelledby="nav-life">
+      <p id="nav-life">Życie na pokładzie</p>
+      <a href="#aktywnosci" data-page="aktywnosci">Aktywności</a>
+      <a href="#kalendarz" data-page="kalendarz">Kalendarz</a>
+      <a href="#zaloga" data-page="zaloga">Poznaj załogę</a>
+      <a href="#profil" data-page="profil">Mój profil</a>
+    </div>
+    <div class="nav-group" role="group" aria-labelledby="nav-duties">
+      <p id="nav-duties">Warty i obowiązki</p>
+      <a href="#raporty" data-page="raporty">Moje przydziały</a>
+      <a href="#plan-zalogi" data-page="plan-zalogi">Plan załogi</a>
+      <a href="#dziennik-raportow" data-page="dziennik-raportow">Dziennik raportów</a>
+    </div>
+  </nav>
+  <div class="profile"><label for="crew">Aktywny profil</label><select id="crew"></select></div>
+</aside>
+<main>
+  <header class="top"><span><span class="dot"></span> MV Horizon</span><span id="network">Tryb demo</span><button id="install" class="secondary" hidden>Zainstaluj PWA</button></header>
+  <div id="content"></div>
+</main>
+<dialog id="dialog"></dialog>
+<div id="notice" role="status" aria-live="polite"></div>
+<script src="crew-profiles.js?v=16" defer></script>
+<script src="voice.js?v=16" defer></script>
+<script src="duties.js?v=16" defer></script>
+<script src="app.js?v=16" defer></script>
+</body>
+</html>

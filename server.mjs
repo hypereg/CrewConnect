@@ -10,6 +10,7 @@ const { PORT = '3000' } = process.env;
 const assets = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
+  ['/legacy.html', ['legacy.html', 'text/html; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
   ['/crew-profiles.js', ['crew-profiles.js', 'text/javascript; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
@@ -34,7 +35,7 @@ createServer(async (req, res) => {
     if (req.method !== 'GET' || !asset) return res.writeHead(404).end();
     const [file, contentType] = asset;
     let body = await readFile(new URL('dist/' + file, import.meta.url));
-    if (file === 'index.html') {
+    if (file === 'index.html' || file === 'legacy.html') {
       body = body.toString('utf8').replace('<head>', '<head>\n<meta name="crewconnect-shared" content="yes">');
     }
     return res.writeHead(200, {'Content-Type': contentType, 'X-Content-Type-Options': 'nosniff'}).end(body);

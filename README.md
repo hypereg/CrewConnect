@@ -12,6 +12,7 @@ Lokalnie serwer bez MongoDB współdzieli dane między przeglądarkami do czasu 
 
 - Na Vercel lub serwerze Node pod HTTPS skonfiguruj `SOCIAL_MONGODB_URI` (lub `MONGODB_URI`), `DEMO_ADMIN_EMAIL`, indywidualny `DEMO_ADMIN_CODE` (min. 12 znaków) i losowy `DEMO_SESSION_SECRET` (min. 32 znaki). Ustaw `NODE_ENV=production` przy wdrożeniu Node. Dane demo trafiają do osobnej bazy `SOCIAL_MONGODB_DATABASE`, domyślnie `crewconnect_social_demo`.
 - Użyj danych testowych. Kod gościa ma stałą wartość, a adres e-mail jest identyfikatorem demonstracyjnym.
+- Hosting bez ustawień demo udostępnia poprzedni prototyp. Po ustawieniu zmiennych ekranem startowym stają się nowe wydarzenia.
 - Uruchamiaj PWA i API z jednej domeny. Ustaw repozytoryjną zmienną `CREWCONNECT_API_URL` na adres wdrożonego demo, aby GitHub Pages kierował na tę domenę. Workflow zachowuje dotychczasową publikację, gdy zmienna jest pusta.
 - Zestaw testów uruchamia polecenie `npm test`.
 

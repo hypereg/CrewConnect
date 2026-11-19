@@ -75,6 +75,22 @@ const peopleIn = (state, cabin) => state.accounts.filter(person =>
 const staff = user => user.role !== 'guest';
 const manages = (user, event) => user.role === 'admin' || (user.role === 'planner' && event.ownerId === user.id);
 
+function chatPartner(state, user, voyage, id) {
+  const person = state.accounts.find(item => item.id === id);
+  const connected = (from, to) => state.choices.some(choice =>
+    choice.voyageId === voyage?.id && choice.from === from && choice.to === to && choice.choice === 'connect');
+  if (!voyage || !user?.visible || !person?.active || !person.visible ||
+      user.id === id || !membership(user, voyage) || !membership(person, voyage) ||
+      !connected(user.id, id) || !connected(id, user.id)) fail(404, 'Czat jest niedostępny.');
+  return person;
+}
+
+function readChat(state, user, voyage, id) {
+  const person = chatPartner(state, user, voyage, id);
+  return {person: publicProfile(person), messages: (state.messages || []).filter(item => item.voyageId === voyage.id &&
+    ((item.from === user.id && item.to === id) || (item.from === id && item.to === user.id))).slice(-100)};
+}
+
 function invitation(state, token, checkCapacity = true) {
   if (typeof token !== 'string' || !/^[\w-]{32}$/.test(token)) fail(404, 'Zaproszenie jest nieprawidłowe lub wygasło.');
   const voyage = activeVoyage(state);
@@ -308,6 +324,13 @@ function memberAction(state, body, user, voyage) {
       else state.choices.push({voyageId: voyage.id, from: user.id, to: person.id, choice: body.choice});
       return {};
     }
+    case 'sendMessage': {
+      const person = chatPartner(state, user, voyage, body.id);
+      state.messages ||= [];
+      state.messages.push({id: randomUUID(), voyageId: voyage.id, from: user.id, to: person.id,
+        text: text(body.message, 500, 'Wiadomość'), at: new Date().toISOString()});
+      return {};
+    }
     default: fail(400, 'Nieznana operacja.');
   }
 }
@@ -329,18 +352,22 @@ export default async function social(req, res) {
   const send = (status, value) => res.writeHead(status, {'Content-Type': 'application/json; charset=utf-8'}).end(JSON.stringify(value));
   res.setHeader('Cache-Control', 'no-store');
   try {
-    if (dbName === (env.MONGODB_DATABASE || 'crewconnect') ||
-        (hosted && (!mongoUri || !env.DEMO_SESSION_SECRET || env.DEMO_SESSION_SECRET.length < 32 || adminCode.length < 12 || !env.DEMO_ADMIN_EMAIL))) {
-      fail(503, 'Wspólne demo wymaga konfiguracji serwera.');
+    if (dbName === (env.MONGODB_DATABASE || 'crewconnect') || (hosted &&
+        (!mongoUri || !env.DEMO_SESSION_SECRET || env.DEMO_SESSION_SECRET.length < 32 || adminCode.length < 12 || !env.DEMO_ADMIN_EMAIL))) {
+      return send(503, {error: 'Wspólne demo wymaga konfiguracji serwera.', code: 'DEMO_NOT_CONFIGURED'});
     }
     if (req.method === 'GET') {
-      const token = new URL(req.url, 'http://localhost').searchParams.get('invite');
+      const params = new URL(req.url, 'http://localhost').searchParams;
+      const token = params.get('invite');
+      const chat = params.get('chat');
       const state = await store.read();
       if (token !== null) {
         const {cabin, voyage} = invitation(state, token, false);
         return send(200, {cabin: cabin.label, voyage: voyage.name, full: peopleIn(state, cabin) >= cabin.capacity});
       }
-      return send(200, board(state, session(req, state)));
+      const user = session(req, state);
+      if (chat !== null) return send(200, readChat(state, user, activeVoyage(state), chat));
+      return send(200, board(state, user));
     }
     if (req.method !== 'POST') fail(405, 'Niedozwolona metoda.');
     if (req.headers['content-type']?.split(';')[0] !== 'application/json') fail(415, 'Wymagany JSON.');
