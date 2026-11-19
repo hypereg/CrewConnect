@@ -31,6 +31,10 @@ Backend wymaga Node.js 22. Wspólny harmonogram wymaga MongoDB. Jeśli korzystas
 
 Domyślna baza to `crewconnect`, a kolekcja `workspaces` powstaje przy pierwszym zapisie. Losowy identyfikator w ciasteczku HttpOnly wiąże obszar roboczy z przeglądarką. W jednym obszarze profile demo współdzielą wydarzenia i raporty. Zmiany offline są przechowywane lokalnie i synchronizowane po odzyskaniu połączenia.
 
+### Ponowne logowanie do profilu
+
+Wybierz **Mój profil → Wyloguj się** i podaj testowy e-mail. Przy ponownym logowaniu w tej samej przeglądarce wpisz ten adres i wybierz **Pokaż kod demo**. Jednorazowy sześciocyfrowy kod pojawi się w powiadomieniu w oknie logowania. Jest ważny przez 10 minut. Aplikacja nie wysyła e-maili. Ta funkcja korzysta z serwera i MongoDB. Jeśli masz zapisany wcześniej 64-znakowy kod powrotu, możesz użyć go w oknie logowania.
+
 ## GitHub Pages i Atlas
 
 1. Wdróż backend Node.js na hostingu HTTPS z dostępem do Atlas. Ustaw sekret `MONGODB_URI`, opcjonalną nazwę bazy `MONGODB_DATABASE` oraz `FRONTEND_ORIGIN=https://hypereg.github.io`. Przy wdrożeniu dostarczanym przez platformę ustaw adres nasłuchu `HOST=0.0.0.0`.

@@ -1,7 +1,7 @@
 import {createHash, randomBytes, randomUUID, timingSafeEqual} from 'node:crypto';
 import {MongoClient} from 'mongodb';
 import {discoveryId, discoveryFields} from '../discovery-profile.mjs';
-import {recoveryDigest} from './workspace.mjs';
+import {recoveryDigest} from '../workspace-session.mjs';
 
 const {MONGODB_URI, MONGODB_DATABASE = 'crewconnect'} = process.env;
 let connecting;
@@ -77,7 +77,7 @@ export default async function users(req, res) {
     if (body.action === 'resetCode') {
       if (row.archived) return send(res, 409, {error: 'Najpierw przywróć użytkownika.'});
       const code = random();
-      await workspaces.updateOne({_id: row._id, archived: {$ne: true}}, {$set: {recovery: recoveryDigest(code)}});
+      await workspaces.updateOne({_id: row._id, archived: {$ne: true}}, {$set: {recovery: recoveryDigest(code)}, $unset: {demoLogin: ''}});
       return send(res, 200, {code});
     }
     if (body.action === 'archive') {
