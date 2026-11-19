@@ -1,3 +1,5 @@
+import { createSocialNotifications } from './social-notifications.js?v=1';
+
 const content = document.querySelector('#content');
 const landingPage = document.querySelector('#landing-page');
 const nav = document.querySelector('#navigation');
@@ -31,6 +33,7 @@ const icons = {
 };
 const links = [
   ['wydarzenia', 'Wydarzenia', 'ticket'], ['kalendarz', 'Kalendarz', 'calendar'], ['poznaj', 'Poznaj ludzi', 'users'],
+  ['restauracje', 'Restauracje', 'cutlery', 'legacy.html#restauracje'],
   ['mapa', 'Mapa statku', 'map'], ['moje-zapisy', 'Moje zapisy', 'bookmark']
 ];
 
@@ -69,6 +72,10 @@ let refreshing = false;
 let requestVersion = 0;
 let chatPoll;
 let landingAnimated;
+
+const notifications = createSocialNotifications({
+  menu: document.querySelector('#social-notifications'), request, openItem: openNotification, announce, escape
+});
 
 function readLocal(key) {
   try { return localStorage.getItem(key); } catch { return null; }
@@ -602,6 +609,7 @@ function render(focus = false) {
   const {page, id, date} = route();
   document.body.classList.toggle('is-landing', page === 'start');
   if (page === 'start') {
+    notifications.showFor();
     content.classList.remove('map-content');
     document.title = 'CrewConnect — Twój przewodnik po rejsie';
     renderLanding(id, focus);
@@ -627,7 +635,7 @@ function render(focus = false) {
   drawerVoyageName.textContent = voyageName || '';
   const panelLink = user?.role === 'admin' ? ['admin', 'Panel admina', 'shield'] :
     user?.role === 'planner' ? ['planner', 'Panel plannera', 'shield'] : null;
-  const navLink = ([key, label, symbol]) => '<a href="#' + key + '"' +
+  const navLink = ([key, label, symbol, href = '#' + key]) => '<a href="' + href + '"' +
     (parent === key ? ' aria-current="page"' : '') + '>' + navIcon(symbol) + '<span>' + label + '</span></a>';
   nav.innerHTML = displayNav ? '<div class="nav-group" role="group" aria-labelledby="nav-life"><p id="nav-life">Życie na pokładzie</p>' +
     links.map(navLink).join('') + '</div>' +
@@ -641,6 +649,7 @@ function render(focus = false) {
   connection.hidden = !offline || !displayNav;
   connection.textContent = offline && cachedAt ? 'Offline · dane z ' + new Date(cachedAt).toLocaleString('pl-PL', {dateStyle: 'short', timeStyle: 'short'}) : '';
   const canUseBoard = board?.access && board.voyage;
+  notifications.showFor(displayNav && canUseBoard ? board.voyage.id + ':' + user.id : undefined);
   content.classList.toggle('map-content', page === 'mapa');
   if (page === 'mapa') renderMap(id);
   else if (page === 'rejestracja' || page === 'logowanie' || (!user && board)) content.innerHTML = renderLogin(page);
@@ -709,6 +718,21 @@ window.addEventListener('message', event => {
   form.querySelector('.form-error').hidden = true;
   dialog.close();
 });
+
+async function openNotification(item) {
+  if (item.kind === 'event') {
+    if (!eventById(item.target)) await refresh(true);
+    navigate('wydarzenie/' + encodeURIComponent(item.target));
+    return;
+  }
+  if (!board.profiles?.some(profile => profile.match && profile.id === item.target)) await refresh(true);
+  if (!board.profiles?.some(profile => profile.match && profile.id === item.target)) {
+    announce('Ta rozmowa jest już niedostępna.');
+    return;
+  }
+  navigate('poznaj');
+  openChat(item.target);
+}
 
 function openChat(id, newMatch = false) {
   const person = board.profiles?.find(profile => profile.match && profile.id === id);
@@ -992,12 +1016,15 @@ function stopSwipe(event) {
 for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) content.addEventListener(name, stopSwipe);
 
 function initRoute() {
-  if (route().page === 'rejestracja') {
+  const {page, token} = route();
+  if (page === 'restauracje' || page === 'gry') {
+    location.replace(new URL('legacy.html#restauracje', location.href));
+  } else if (page === 'rejestracja') {
     loginFlow = {email: ''};
-    void loadInvite(route().token);
+    void loadInvite(token);
   } else {
     render(true);
-    if (route().page !== 'start' && !board) void refresh();
+    if (page !== 'start' && !board) void refresh();
   }
 }
 function onlineRefresh() {

@@ -251,22 +251,7 @@
 .statistics-table th,.statistics-table td{padding:11px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
 .statistics-table th:first-child{text-align:left}.statistics-table thead{background:#e9f1f5}.statistics-table tr:last-child>*{border-bottom:0}
 
-.notification-menu{position:relative;z-index:7}
-.notification-menu summary{position:relative;display:grid;place-items:center;width:44px;height:40px;cursor:pointer;list-style:none;border:1px solid var(--line);border-radius:10px;background:white}
-.notification-menu summary::-webkit-details-marker{display:none}
-.notification-menu summary [data-unread]{position:absolute;inset:-5px -5px auto auto;min-width:20px;padding:2px 4px;border-radius:18px;background:#a42f54;color:white;text-align:center;font-size:12px}
-.notification-popover{position:absolute;right:0;top:calc(100% + 8px);width:min(360px,calc(100vw - 28px));border:1px solid var(--line);border-radius:15px;background:#fff;box-shadow:0 14px 36px #112a4633;padding:12px;color:#182d42}
-.notification-popover h2{margin:0 0 8px;font-size:18px}
-.notification-tools{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
-.notification-tools button{padding:6px 9px;min-height:34px;font-size:13px}
-.notification-tools button:disabled{opacity:.55;cursor:default}
-.notification-list{display:grid;gap:5px;max-height:min(55svh,420px);overflow:auto;overscroll-behavior:contain}
-.notification-item{display:grid;grid-template-columns:30px minmax(0,1fr) 8px;gap:8px;align-items:center;text-align:left;min-height:50px;padding:8px;border:1px solid var(--line);border-radius:9px;background:#fff;color:inherit}
-.notification-item.unread{background:#eaf6f3}.notification-item strong{display:block;overflow-wrap:anywhere}.notification-item time{color:var(--muted);font-size:12px}
-.notification-symbol{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:#dfeef0}
-.notification-dot{width:7px;height:7px;border-radius:50%;background:#087e72}
 .admin-audit{margin-top:18px}.admin-audit h2{margin:0 0 8px}.admin-audit ol{list-style:none;margin:0;padding:0}.admin-audit li{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--line)}.admin-audit li span{display:block;color:var(--muted)}
-@media(max-width:540px){.notification-popover{position:fixed;top:106px;right:14px}}
 
 .welcome-draw{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:22px;margin:18px 0;border-top:3px solid #a97738}
 .welcome-draw h2,.welcome-draw h3{margin:0}

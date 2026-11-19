@@ -192,11 +192,14 @@ p { overflow-wrap: anywhere; }
   width: 37px;
   height: 37px;
   border-radius: 11px;
-  color: var(--deep-water);
-  background: var(--sea-glass);
+  color: #f5fafb;
+  background: #214453;
+  font-size: 1.25rem;
+  line-height: 1;
   text-decoration: none;
 }
-.brand .ui-icon, .mobile-brand .ui-icon { width: 24px; height: 24px; }
+.brand .brand-wordmark > span { color: var(--accent); }
+.site-footer .brand .brand-wordmark > span { color: var(--sea-glass); }
 .sidebar.shell-drawer nav, .sidebar.shell-drawer .nav-group { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
 .sidebar.shell-drawer #public-navigation { gap: 13px; }
 .sidebar.shell-drawer .nav-group + .nav-group { margin-top: 19px; }
@@ -273,8 +276,64 @@ p { overflow-wrap: anywhere; }
   white-space: nowrap;
 }
 .shell-top #trip-label::before { display: none; }
-.shell-top .notification-menu summary { height: 44px; background: var(--surface); }
-.shell-top .notification-popover { top: calc(100% + 10px); }
+.notification-menu { position: relative; flex: 0 0 auto; z-index: 1; }
+.notification-menu summary {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.notification-menu summary::-webkit-details-marker { display: none; }
+.notification-menu summary:hover, .notification-menu[open] summary { background: var(--soft); color: var(--accent); }
+.notification-menu [data-unread] {
+  position: absolute;
+  inset: -6px -6px auto auto;
+  min-width: 21px;
+  padding: 2px 4px;
+  border-radius: 14px;
+  background: #a42f54;
+  color: white;
+  text-align: center;
+  font-size: .75rem;
+}
+.notification-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  width: min(360px, calc(100vw - 30px));
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  box-shadow: 0 14px 36px #112a4633;
+  padding: 12px;
+}
+.notification-popover h2 { margin: 0 0 8px; font-size: 1.15rem; }
+.notification-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
+.notification-tools button { min-height: 44px; padding: 6px 9px; font-size: .83rem; }
+.notification-tools button:disabled { opacity: .65; cursor: default; }
+.notification-list { display: grid; gap: 5px; max-height: min(55svh, 420px); overflow: auto; overscroll-behavior: contain; }
+.notification-list p { margin: 0; padding: .5rem; }
+.notification-item {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 8px;
+  gap: 8px;
+  align-items: center;
+  text-align: left;
+  min-height: 50px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+.notification-item strong { display: block; overflow-wrap: anywhere; }
+.notification-item time { color: var(--muted); font-size: .76rem; }
+.notification-symbol { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; }
+.notification-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .site-footer { color: #d7e8eb; background: var(--deep-water); }
 .app-shell > main, .crewconnect-layout #content {
   width: min(100%, 1300px);
@@ -492,7 +551,6 @@ body :is(input:not([type=checkbox]):not([type=radio]), textarea, select):not(.pr
   .drawer-open .drawer-shade { opacity: 1; visibility: visible; }
   .drawer-toggle, .drawer-close, .mobile-brand { display: grid; }
   .mobile-brand { width: 32px; height: 32px; border-radius: 9px; }
-  .mobile-brand .ui-icon { width: 22px; height: 22px; }
   .shell-top { padding-inline: var(--page-padding); }
   .app-shell .calendar-header { gap: 12px; }
   .calendar .calendar-day { height: clamp(44px, 9vw, 75px); }
@@ -500,7 +558,7 @@ body :is(input:not([type=checkbox]):not([type=radio]), textarea, select):not(.pr
 }
 
 @media (max-width: 540px) {
-  .shell-top .notification-popover { top: var(--header-height); }
+  .shell-top .notification-popover { position: fixed; top: calc(var(--header-height) + 4px); right: var(--page-padding); }
   .shell-top #network { display: none; }
   .shell-top .shell-start { gap: 7px; }
   .shell-top .header-context { gap: 5px; }

@@ -23,6 +23,7 @@ const assets = new Map([
   ['/restaurants.js', ['restaurants.js', 'text/javascript; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/social.js', ['social.js', 'text/javascript; charset=utf-8']],
+  ['/social-notifications.js', ['social-notifications.js', 'text/javascript; charset=utf-8']],
   ['/social.css', ['social.css', 'text/css; charset=utf-8']],
   ['/design.css', ['design.css', 'text/css; charset=utf-8']],
   ['/design.js', ['design.js', 'text/javascript; charset=utf-8']],
