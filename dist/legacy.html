@@ -9,20 +9,23 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.png">
 <link rel="apple-touch-icon" href="icon.png">
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=26">
 <title>CrewConnect — Na pokładzie</title>
 </head>
-<body>
-<aside class="sidebar">
+<body class="crewconnect-layout">
+<aside class="sidebar" aria-label="CrewConnect">
   <a class="brand" href="#aktywnosci"><span class="logo" aria-hidden="true">⚓</span><span>Crew<span>Connect</span></span></a>
+  <button type="button" class="mobile-menu-toggle" aria-expanded="false" aria-controls="mobile-navigation">
+    <span class="menu-icon" aria-hidden="true"></span><span>Menu</span>
+  </button>
+  <div class="sidebar-panel" id="mobile-navigation">
   <nav aria-label="Menu główne">
     <div class="nav-group" role="group" aria-labelledby="nav-life">
       <p id="nav-life">Życie na pokładzie</p>
       <a href="#aktywnosci" data-page="aktywnosci">Aktywności</a>
       <a href="#kalendarz" data-page="kalendarz">Kalendarz</a>
       <a href="#zaloga" data-page="zaloga">Poznaj załogę</a>
-      <a href="#profil" data-page="profil">Mój profil</a>
-      <a class="ship-nav-link" href="navigation.html">Mapa statku</a>
+      <a class="ship-nav-link" href="#mapa" data-page="mapa">Mapa statku</a>
     </div>
     <div class="nav-group" role="group" aria-labelledby="nav-duties">
       <p id="nav-duties">Warty i obowiązki</p>
@@ -31,16 +34,33 @@
       <a href="#dziennik-raportow" data-page="dziennik-raportow">Dziennik raportów</a>
     </div>
   </nav>
-  <div class="profile"><label for="crew">Aktywny profil</label><select id="crew"></select></div>
+  <div class="profile"><label for="crew">Aktywny profil</label><select id="crew"></select>
+    <a class="sidebar-profile-link" href="#profil" data-page="profil">Mój profil</a>
+  </div>
+  </div>
 </aside>
 <main>
   <header class="top"><span><span class="dot"></span> MV Horizon</span><span id="network">Tryb demo</span><button id="install" class="secondary" hidden>Zainstaluj PWA</button></header>
   <div id="content"></div>
 </main>
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <div class="site-footer-identity">
+      <a class="brand" href="#aktywnosci"><span class="logo" aria-hidden="true">⚓</span><span>Crew<span>Connect</span></span></a>
+      <p>MV Horizon</p>
+    </div>
+    <nav class="site-footer-links" aria-label="Nawigacja w stopce">
+      <a href="#kalendarz">Kalendarz załogi</a>
+      <a href="#zaloga">Poznaj załogę</a>
+      <a href="#mapa">Mapa statku</a>
+      <a href="#raporty">Moje przydziały</a>
+    </nav>
+  </div>
+</footer>
 <dialog id="dialog"></dialog>
 <div id="notice" role="status" aria-live="polite"></div>
 <script src="voice.js?v=18" defer></script>
 <script src="duties.js?v=18" defer></script>
-<script src="app.js?v=21" defer></script>
+<script src="app.js?v=26" defer></script>
 </body>
 </html>

@@ -326,6 +326,27 @@ async function refreshDiscovery() {
   }
 }
 
+function renderDiscoveryCard(profile, commonInterests) {
+  const id = escape(profileId(profile));
+  return `<div class="swipe-deck">
+    <article class="crew-card swipe-card" id="crew-card" data-profile="${id}">
+      <div class="crew-portrait ${profile.color || 'plum'}">
+        <span class="swipe-initials" aria-hidden="true">${escape(profile.initials || initials(profile.name))}</span>
+        <strong class="swipe-stamp swipe-like" aria-hidden="true">Chcę poznać</strong>
+        <strong class="swipe-stamp swipe-pass" aria-hidden="true">Pomijam</strong>
+      </div>
+      <div class="crew-details">${profileDetails(profile, commonInterests)}</div>
+    </article>
+  </div>
+  <div class="crew-actions swipe-actions" aria-label="Wybierz reakcję">
+    <button type="button" class="swipe-choice" data-action="crew-skip" data-profile="${id}">
+      <span class="swipe-choice-icon" aria-hidden="true">×</span>Pomiń</button>
+    <button type="button" class="swipe-choice" data-action="crew-connect" data-profile="${id}">
+      <span class="swipe-choice-icon" aria-hidden="true">♥</span>Chcę poznać</button>
+  </div>
+  <p class="crew-hint muted">Przesuń kartę w lewo lub w prawo albo użyj przycisków.</p>`;
+}
+
 function renderOnlineDiscovery() {
   const heading = '<header class="crew-heading"><h1>Poznaj załogę online</h1>' +
     '<button class="secondary" data-action="online-reset">Usuń historię dopasowań</button></header>';
@@ -345,11 +366,7 @@ function renderOnlineDiscovery() {
   const candidate = candidates.find(profile => !onlineDiscovery.liked.includes(profile.id));
   const waiting = query && candidates.some(profile => onlineDiscovery.liked.includes(profile.id) && !onlineDiscovery.matches.includes(profile.id));
   const matches = profiles.filter(profile => onlineDiscovery.matches.includes(profile.id));
-  const card = candidate ? `<article class="crew-card" id="crew-card" data-profile="${candidate.id}">
-    <div class="crew-portrait plum"><span aria-hidden="true">${escape(initials(candidate.name))}</span></div>
-    <div class="crew-details">${profileDetails(candidate, state.userProfile.interests.map(interestKey))}</div></article>
-    <div class="crew-actions"><button class="secondary" data-action="crew-skip" data-profile="${candidate.id}">Pomiń</button>
-    <button class="primary" data-action="crew-connect" data-profile="${candidate.id}">Chcę poznać</button></div>` :
+  const card = candidate ? renderDiscoveryCard(candidate, state.userProfile.interests.map(interestKey)) :
     `<div class="card crew-empty"><h2>${waiting ? 'Wysłano polubienie' : 'Brak nowych profili online'}</h2>
       <p>${waiting ? 'Dopasowanie pojawi się, gdy druga osoba również kliknie „Chcę poznać”.' : 'Sprawdź nazwę, zmień filtry lub poproś drugą osobę o opublikowanie profilu.'}</p></div>`;
   return heading + error + `
@@ -402,16 +419,7 @@ function renderCrew() {
   const interestOptions = new Map(others.flatMap(profile => profile.interests.map(item => [interestKey(item), item])));
   const filters = discoveryFilters();
   const option = (value, label, selected) => `<option value="${escape(value)}" ${value === selected ? 'selected' : ''}>${escape(label)}</option>`;
-  const card = candidate ? `
-    <article class="crew-card" id="crew-card" data-profile="${escape(profileId(candidate))}">
-      <div class="crew-portrait ${candidate.color}"><span aria-hidden="true">${escape(candidate.initials)}</span></div>
-      <div class="crew-details">${profileDetails(candidate, shared(candidate))}</div>
-    </article>
-    <div class="crew-actions">
-      <button class="secondary" data-action="crew-skip" data-profile="${escape(profileId(candidate))}">Pomiń</button>
-      <button class="primary" data-action="crew-connect" data-profile="${escape(profileId(candidate))}">Chcę poznać</button>
-    </div>
-    <p class="crew-hint muted">Przesuń kartę w lewo, aby pominąć, lub w prawo, aby poznać.</p>` : `
+  const card = candidate ? renderDiscoveryCard(candidate, shared(candidate)) : `
     <div class="card crew-empty"><h2>Brak nowych kart w tym widoku</h2>
     ${visibleProfiles.some(profile => choices[profileId(profile)] === 'skip') ? '<button class="secondary" data-action="crew-revisit">Pokaż pominięte osoby</button>' : ''}</div>`;
   return `<header class="crew-heading"><h1>Poznaj załogę</h1><p class="muted">Znajdź osoby, z którymi chcesz spędzić czas po wachcie.</p>
@@ -589,13 +597,19 @@ function render() {
   const calendar = page === 'kalendarz';
   const discover = page === 'zaloga';
   const profile = page === 'profil';
+  const map = page === 'mapa';
+  content.classList.toggle('map-content', map);
   document.querySelectorAll('[data-page]').forEach(link => {
-    if (link.dataset.page === (calendar || reports || discover || profile ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
+    if (link.dataset.page === (calendar || reports || discover || profile || map ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
   renderMemberSelector();
   updateNetwork();
-  if (profile) {
+  if (map) {
+    if (!content.querySelector('.ship-map-frame')) {
+      content.innerHTML = '<iframe class="ship-map-frame" title="Mapa statku" src="navigation.html?embed=1"></iframe>';
+    }
+  } else if (profile) {
     content.innerHTML = renderUserProfile();
   } else if (discover) {
     content.innerHTML = renderCrew();
@@ -824,7 +838,7 @@ content.addEventListener('click', e => {
     return;
   }
   if (action === 'crew-skip' || action === 'crew-connect') {
-    chooseCrewProfile(button.dataset.profile, action === 'crew-connect' ? 'connect' : 'skip');
+    void reactToCrewCard(button.dataset.profile, action === 'crew-connect' ? 'connect' : 'skip');
     return;
   }
   if (action === 'crew-revisit') {
@@ -865,11 +879,44 @@ content.addEventListener('click', e => {
   }
   if (action === 'report' || action === 'local-report' || action.startsWith('duty-')) void handleDutyAction(button);
 });
+let reactingToCard = false;
+async function reactToCrewCard(profile, choice) {
+  if (reactingToCard) return;
+  const card = content.querySelector('#crew-card');
+  if (!card || card.dataset.profile !== profile) return;
+  const memberAtStart = state.member;
+  reactingToCard = true;
+  try {
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && card.animate) {
+      const direction = choice === 'connect' ? 1 : -1;
+      card.dataset.swipe = choice;
+      card.style.setProperty('--swipe-strength', '1');
+      await card.animate([
+        {transform: card.style.transform || 'none', opacity: 1},
+        {transform: `translateX(${direction * 175}px) rotate(${direction * 14}deg)`, opacity: 0}
+      ], {duration: 210, easing: 'ease-in', fill: 'forwards'}).finished.catch(() => {});
+    }
+    if (state.member === memberAtStart && location.hash === '#zaloga') chooseCrewProfile(profile, choice);
+  } finally {
+    card.getAnimations?.().forEach(animation => animation.cancel());
+    resetSwipeCard(card);
+    reactingToCard = false;
+  }
+}
+
+function resetSwipeCard(card) {
+  card.style.transform = '';
+  card.style.removeProperty('--swipe-strength');
+  delete card.dataset.swipe;
+  card.classList.remove('dragging');
+}
+
 let swipe;
 content.addEventListener('pointerdown', event => {
   const card = event.target.closest('#crew-card');
-  if (!card || !event.isPrimary || event.button !== 0) return;
+  if (!card || reactingToCard || !event.isPrimary || event.button !== 0) return;
   swipe = {card, pointer: event.pointerId, x: event.clientX, y: event.clientY};
+  card.classList.add('dragging');
   card.setPointerCapture(event.pointerId);
 });
 
@@ -879,18 +926,24 @@ content.addEventListener('pointermove', event => {
   const dy = event.clientY - swipe.y;
   if (Math.abs(dx) <= Math.abs(dy)) return;
   const shift = Math.max(-90, Math.min(90, dx));
-  swipe.card.style.transform = `translateX(${shift}px) rotate(${shift / 18}deg)`;
+  const strength = Math.min(1, Math.abs(dx) / 70);
+  swipe.card.dataset.swipe = shift > 0 ? 'connect' : 'skip';
+  swipe.card.style.setProperty('--swipe-strength', String(strength));
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    swipe.card.style.transform = `translateX(${shift}px) rotate(${shift / 12}deg)`;
+  }
 });
 
 function finishSwipe(event) {
   if (swipe?.pointer !== event.pointerId) return;
   const {card, x, y} = swipe;
   swipe = undefined;
-  card.style.transform = '';
   const dx = event.clientX - x;
   const dy = event.clientY - y;
   if (event.type === 'pointerup' && card.isConnected && Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(dy) * 1.25) {
-    chooseCrewProfile(card.dataset.profile, dx > 0 ? 'connect' : 'skip');
+    void reactToCrewCard(card.dataset.profile, dx > 0 ? 'connect' : 'skip');
+  } else {
+    resetSwipeCard(card);
   }
 }
 content.addEventListener('pointerup', finishSwipe);
@@ -982,3 +1035,25 @@ window.addEventListener('online', refreshDiscovery);
 setInterval(() => { if (!document.hidden) void refreshDiscovery(); }, 3000);
 window.addEventListener('online', refreshEvents);
 setInterval(() => { if (!document.hidden) void refreshEvents(); }, 15000);
+
+const mobileMenu = document.querySelector('.mobile-menu-toggle');
+const navigation = document.querySelector('#mobile-navigation');
+if (mobileMenu && navigation) {
+  function setMenu(open) {
+    mobileMenu.setAttribute('aria-expanded', String(open));
+  }
+  mobileMenu.addEventListener('click', () => setMenu(mobileMenu.getAttribute('aria-expanded') !== 'true'));
+  navigation.addEventListener('click', event => {
+    if (mobileMenu.getAttribute('aria-expanded') === 'true' && event.target.closest('a[href^="#"]')) {
+      setMenu(false);
+      mobileMenu.focus({preventScroll: true});
+    }
+  });
+  window.addEventListener('hashchange', () => setMenu(false));
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !dialog.open && mobileMenu.getAttribute('aria-expanded') === 'true') {
+      setMenu(false);
+      mobileMenu.focus();
+    }
+  });
+}
