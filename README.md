@@ -6,6 +6,8 @@
 2. W lokalnym demie zaloguj się jako `admin@example.test` z kodem `12345`. W panelu admina utwórz rejs, dodaj kabiny z listy lub zakresu (np. `101–110, A12`) i wygeneruj ich kody QR. Wydrukuj QR dla każdej kabiny i powieś go w tej kabinie. Kolejni goście używają tego samego zaproszenia, aż do zapełnienia miejsc. W sekcji **Konta** utwórz plannera i zapisz jego indywidualny kod.
 3. Otwórz link zaproszenia lub zeskanuj kod QR od administratora. Podaj nazwę i testowy e-mail, żeby założyć konto gościa. Przy ponownym logowaniu podaj ten sam e-mail. Skopiuj sześciocyfrowy kod z powiadomienia w przeglądarce i wpisz go w formularzu. Kod jest jednorazowy i ważny przez 10 minut.
 
+Aby przetestować rejs bez zaproszenia, wpisz nowy testowy e-mail na ekranie logowania, a następnie kod `123456`. Aplikacja przydzieli pierwszą kabinę z wolnym miejscem w aktywnym rejsie. Gość zalogowany na istniejące konto może użyć tego samego kodu, jeśli nie ma kabiny w bieżącym rejsie.
+
 Otwieraj aplikację pod adresem serwera, np. `http://localhost:3000`. Uruchomiony serwer obsługuje logowanie, wydarzenia i rejestrację z QR.
 
 Lokalnie serwer bez MongoDB współdzieli dane między przeglądarkami do czasu restartu procesu. Do testu na drugim telefonie uruchom serwer z `HOST=0.0.0.0` i otwórz go z obu urządzeń przez ten sam adres sieciowy przed wygenerowaniem QR. Test instalacji PWA i ponownego otwarcia offline wymaga HTTPS lub `localhost`.

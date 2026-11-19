@@ -81,7 +81,7 @@ test('shared cruise workflow enforces cabin capacity, event limits and role owne
   await guestA('logout', {});
   guestA = client();
   const guestEmail = 'ala@example.test';
-  await guestA('requestLoginCode', {email: 'unknown@example.test'}, 404);
+  assert.deepEqual(await guestA('requestLoginCode', {email: 'unknown@example.test'}), {demoSignup: true});
   await login(guestA, guestEmail, '123456', 401);
   const issueCode = async () => {
     const {code} = await guestA('requestLoginCode', {email: '  ALA@Example.Test  '});
@@ -196,4 +196,29 @@ test('shared cruise workflow enforces cabin capacity, event limits and role owne
   await guestA('?invite=' + renewedToken, undefined, 404);
   assert.equal((await guestA()).access, false);
   assert.equal((await admin()).events[0].voyageId, voyage.id);
+
+  const demoGuest = client(), overflow = client();
+  const demoSignup = {email: 'demo@example.test', code: '123456'};
+  await demoGuest('joinDemoCabin', demoSignup, 409);
+  const {voyage: demoVoyage} = await admin('createVoyage', {name: 'Rejs demo', timeZone: 'Europe/Warsaw'});
+  await demoGuest('joinDemoCabin', demoSignup, 409);
+  await admin('addCabins', {labels: '201, 202', capacity: 1, voyageId: demoVoyage.id});
+  await admin('joinDemoCabin', demoSignup, 403);
+  await demoGuest('joinDemoCabin', {...demoSignup, code: '000000'}, 401);
+  await demoGuest('joinDemoCabin', {...demoSignup, email: guestEmail}, 409);
+  assert.equal((await demoGuest()).user, null);
+
+  const demoBoard = await demoGuest('joinDemoCabin', {...demoSignup, email: ' Demo@Example.Test '});
+  assert.equal(demoBoard.user.cabin, '201');
+  assert.equal((await demoGuest('joinDemoCabin', {code: '123456'})).user.id, demoBoard.user.id);
+  const {user: returning} = await guestA('joinDemoCabin', {code: '123456'});
+  assert.equal(returning.cabin, '202');
+  assert.equal(returning.id, ala.user.id);
+  await overflow('joinDemoCabin', {email: 'overflow@example.test', code: '123456'}, 409);
+  assert.equal((await overflow()).user, null);
+
+  await demoGuest('logout', {});
+  await login(demoGuest, demoSignup.email, '123456', 401);
+  const {code: demoLoginCode} = await demoGuest('requestLoginCode', {email: demoSignup.email});
+  assert.equal((await login(demoGuest, demoSignup.email, demoLoginCode)).user.id, demoBoard.user.id);
 });
