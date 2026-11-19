@@ -299,28 +299,31 @@ function renderCalendar() {
     cell.setUTCDate(i - offset + 1);
     const date = cell.toISOString().slice(0, 10);
     const listings = eventsByDay.get(date) || [];
+    const bySource = Object.keys(eventSources).map(source => [source, listings.filter(event => sourceOf(event) === source)]);
     return '<button type="button" class="calendar-day' + (date.startsWith(month) ? '' : ' outside') + '" data-action="day" data-id="' +
-      date + '" aria-pressed="' + (day === date) + '" aria-label="' + previewDate(date) + ', liczba wydarzeń: ' +
-      listings.length + '"' + (today === date ? ' aria-current="date"' : '') + '><span class="day-number">' + cell.getUTCDate() + '</span>' +
-      listings.slice(0, 2).map(event =>
-        '<span class="calendar-event">' + eventTime(event) + ' ' + escape(event.title) + '</span>').join('') +
-      (listings.length > 2 ? '<span class="calendar-more">+' + (listings.length - 2) + '</span>' : '') + '</button>';
+      date + '" aria-pressed="' + (day === date) + '" aria-label="' + previewDate(date) + (listings.length ?
+        bySource.filter(([, items]) => items.length).map(([source, items]) => ', ' + eventSources[source] + ' ' + items.length).join('') :
+        ', brak wydarzeń') + '"' + (today === date ? ' aria-current="date"' : '') + '><span class="day-number">' + cell.getUTCDate() + '</span>' +
+      '<span class="calendar-markers" aria-hidden="true">' + bySource.filter(([, items]) => items.length).map(([source, items]) =>
+        '<span class="calendar-event source-' + source + '">' + eventTime(items[0]) + ' ' + escape(items[0].title) +
+        (items.length > 1 ? ' · +' + (items.length - 1) : '') + '</span>').join('') + '</span></button>';
   }).join('');
   const label = new Intl.DateTimeFormat('pl-PL', {timeZone: 'UTC', month: 'long', year: 'numeric'}).format(first);
-  const agenda = (eventsByDay.get(day) || []).map(event => '<article class="agenda-item"><time datetime="' +
-    escape(event.startsAt) + '">' + eventTime(event) + '</time><div><h3>' + escape(event.title) + '</h3><p>' +
-    escape(event.place) + ' · ' + escape(availability(event)) + '</p></div>' +
-    '<a class="button secondary" href="#wydarzenie/' + escape(event.id) + '">Szczegóły</a></article>').join('');
+  const agenda = (eventsByDay.get(day) || []).map(event => '<article class="agenda-item source-' + sourceOf(event) + '"><time datetime="' +
+    escape(event.startsAt) + '">' + eventTime(event) + '</time><div class="agenda-info">' + sourceBadge(sourceOf(event)) +
+    eventBadge(event) + '<h3><a href="#wydarzenie/' + escape(event.id) + '">' + escape(event.title) + '</a></h3><p>' +
+    placeLabel(event) + '</p><p>' + escape(availability(event)) + '</p></div>' + signupAction(event, true) + '</article>').join('');
   return '<section class="calendar" aria-labelledby="calendar-title"><header class="calendar-header">' +
-      '<div><h1 id="calendar-title" tabindex="-1">Wspólny kalendarz załogi</h1><h2>' + label + '</h2></div><div class="calendar-controls">' +
+      '<div><h1 id="calendar-title" tabindex="-1">Kalendarz rejsu</h1><h2>' + label + '</h2></div><div class="calendar-controls">' +
       button('Dzisiaj', 'today', '', '', 'secondary') +
       button('‹', 'month', '-1', 'aria-label="Poprzedni miesiąc"', 'secondary') +
       button('›', 'month', '1', 'aria-label="Następny miesiąc"', 'secondary') +
-      '</div></header><div class="calendar-grid">' + ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd']
+      '</div></header><div class="calendar-legend">' + Object.keys(eventSources).map(sourceBadge).join('') +
+      '</div><div class="calendar-grid">' + ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd']
         .map(text => '<span class="weekday">' + text + '</span>').join('') +
       cells + '</div></section>' +
-    card('<header><h2>' + previewDate(day) + '</h2></header>' +
-      (agenda || '<p>Tego dnia nie ma wspólnych wydarzeń.</p>'), 'agenda');
+    card('<header><h2>' + previewDate(day) + '</h2>' + guestEventAction(day >= today ? day : '') + '</header>' +
+      (agenda || '<p>Tego dnia nie ma wydarzeń.</p>'), 'agenda');
 }
 
 function renderEvents() {
@@ -815,7 +818,13 @@ content.addEventListener('click', event => {
     {action, id, ...(action === 'togglePlanner' && {active: control.dataset.active === 'true'})};
   const messages = {resetMatches: 'Usunięto historię dopasowań.', join: 'Zapisano na wydarzenie.', leave: 'Wypisano z wydarzenia.', closeVoyage: 'Rejs zakończony.',
     cancelEvent: 'Wydarzenie odwołane.', togglePlanner: 'Zapisano status konta.', revokeQr: 'Kod QR unieważniony.'};
-  void mutate(payload, {message: messages[action], after: action === 'connect' ? () => openChat(id, true) : undefined});
+  void mutate(payload, {message: messages[action], after: action === 'connect' ? () => openChat(id, true) : undefined})
+    .then(() => {
+      if ((action === 'join' || action === 'leave') && !control.isConnected && document.activeElement === document.body) {
+        content.querySelector(`button[data-id="${CSS.escape(id)}"][data-action="join"], button[data-id="${CSS.escape(id)}"][data-action="leave"]`)
+          ?.focus({preventScroll: true});
+      }
+    });
 });
 
 let swipe;
