@@ -16,3 +16,9 @@ Domyślna baza to `crewconnect`, a kolekcja `workspaces` powstaje przy pierwszym
 3. Uruchom workflow **Deploy CrewConnect to GitHub Pages**. Wejdź na `https://hypereg.github.io/CrewConnect/`. Bez skonfigurowanego adresu API frontend pracuje w trybie lokalnym.
 
 GitHub Pages hostuje pliki PWA. Backend łączy się z Atlas, a frontend używa prywatnego tokenu obszaru roboczego zapisanego w przeglądarce. Przeglądarka synchronizuje się z API po odzyskaniu połączenia. URI Atlas pozostaje na serwerze.
+
+## Vercel i Atlas
+
+Zaimportuj repozytorium `hypereg/CrewConnect` jako projekt Vercel. Zostaw główny katalog repozytorium jako Root Directory. Plik `vercel.json` wskazuje katalog PWA, a Vercel uruchamia `api/workspace.mjs` jako funkcję Node.js.
+
+W ustawieniach projektu dodaj `MONGODB_URI` jako sekret produkcyjny. Opcjonalnie ustaw `MONGODB_DATABASE`, jeśli baza ma inną nazwę niż `crewconnect`. Adresy wyjściowe funkcji muszą mieć dostęp do klastra Atlas. Po wdrożeniu PWA i API działają na tej samej domenie, więc `FRONTEND_ORIGIN` jest potrzebne tylko wtedy, gdy z API ma korzystać też osobny frontend GitHub Pages.
