@@ -9,8 +9,8 @@ test('shared cruise workflow enforces cabin capacity, event limits and role owne
   delete process.env.SOCIAL_MONGODB_URI;
   delete process.env.MONGODB_URI;
   process.env.SOCIAL_MONGODB_DATABASE = 'crewconnect_social_test_' + Date.now();
-  process.env.DEMO_ADMIN_EMAIL = 'admin@example.test';
-  process.env.DEMO_ADMIN_CODE = 'crew-admin-demo';
+  delete process.env.DEMO_ADMIN_EMAIL;
+  delete process.env.DEMO_ADMIN_CODE;
   const {default: social} = await import('../api/social.mjs');
   const server = createServer(social).listen(0, '127.0.0.1');
   t.after(() => server.close());
@@ -36,7 +36,7 @@ test('shared cruise workflow enforces cabin capacity, event limits and role owne
   const register = (client, token, name, expected) =>
     client('register', {token, email: name.toLowerCase() + '@example.test', name}, expected);
   const invite = url => new URLSearchParams(new URL(url).hash.split('?')[1]).get('kod');
-  await login(admin, 'admin@example.test', 'crew-admin-demo');
+  await login(admin, 'admin@example.test', '12345');
   const {voyage} = await admin('createVoyage', {name: 'Rejs testowy', timeZone: 'Europe/Warsaw'});
   const {cabins: [cabin]} = await admin('addCabin', {label: '101', capacity: 2, voyageId: voyage.id});
   const batch = {voyageId: voyage.id, capacity: 3};

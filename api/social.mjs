@@ -8,7 +8,7 @@ const hosted = env.NODE_ENV === 'production' || Boolean(env.VERCEL);
 const mongoUri = env.SOCIAL_MONGODB_URI || env.MONGODB_URI;
 const dbName = env.SOCIAL_MONGODB_DATABASE || (env.MONGODB_DATABASE || 'crewconnect') + '_social_demo';
 const adminEmail = (env.DEMO_ADMIN_EMAIL || 'admin@example.test').trim().toLowerCase();
-const adminCode = env.DEMO_ADMIN_CODE || (hosted ? '' : 'crew-admin-demo');
+const adminCode = env.DEMO_ADMIN_CODE || (hosted ? '' : '12345');
 const secret = env.DEMO_SESSION_SECRET || randomBytes(32);
 const guestCode = '123456';
 const cookieName = 'crew_social_session';
