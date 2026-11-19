@@ -247,3 +247,5 @@
 .swipe-choice:active .swipe-choice-icon{transform:scale(.91)}
 @media(max-width:680px){.crew-layout{grid-template-columns:minmax(0,1fr);gap:12px}}
 @media(prefers-reduced-motion:reduce){.swipe-card,.swipe-choice-icon{transition:none}}
+
+.swipe-example{position:absolute;bottom:12px;left:16px;padding:5px 9px;border-radius:6px;background:#101c2df0;color:white;font-size:13px;font-weight:650}
