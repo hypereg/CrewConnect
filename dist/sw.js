@@ -1,6 +1,7 @@
-const cacheName = 'crewconnect-shell-social-v5';
-const assets = ['./', 'index.html', 'social.css?v=2', 'social.js?v=3', 'manifest.webmanifest', 'icon.png', 'icon-large.png',
-  'legacy.html', 'style.css?v=18', 'voice.js?v=18', 'duties.js?v=18', 'app.js?v=19'];
+const cacheName = 'crewconnect-shell-social-v6';
+const assets = ['./', 'index.html', 'social.css?v=3', 'social.js?v=3', 'manifest.webmanifest', 'icon.png', 'icon-large.png',
+  'legacy.html', 'style.css?v=19', 'voice.js?v=18', 'duties.js?v=18', 'app.js?v=19',
+  'navigation.html', 'ship-map.css', 'ship-map.mjs', 'ship-canvas.mjs', 'ship-data.mjs'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(assets)).then(() => self.skipWaiting()));
 });
@@ -12,10 +13,10 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
-  const legacy = url.pathname === new URL('legacy.html', self.registration.scope).pathname;
-  if (event.request.mode === 'navigate' && (legacy || url.pathname === new URL('./', self.registration.scope).pathname ||
+  const page = ['legacy.html', 'navigation.html'].find(name => url.pathname === new URL(name, self.registration.scope).pathname);
+  if (event.request.mode === 'navigate' && (page || url.pathname === new URL('./', self.registration.scope).pathname ||
     url.pathname === new URL('index.html', self.registration.scope).pathname)) {
-    event.respondWith(fetch(event.request).catch(() => caches.match(legacy ? './legacy.html' : './index.html')));
+    event.respondWith(fetch(event.request).catch(() => caches.match(page ?? 'index.html')));
     return;
   }
   if (assets.some(asset => new URL(asset, self.registration.scope).href === url.href)) {

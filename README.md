@@ -56,3 +56,9 @@ Zaimportuj repozytorium `hypereg/CrewConnect` jako projekt Vercel. Zostaw głów
 W ustawieniach projektu dodaj `MONGODB_URI` jako sekret produkcyjny. Opcjonalnie ustaw `MONGODB_DATABASE`, jeśli baza ma inną nazwę niż `crewconnect`. Adresy wyjściowe funkcji muszą mieć dostęp do klastra Atlas. Po wdrożeniu PWA i API działają na tej samej domenie, więc `FRONTEND_ORIGIN` jest potrzebne tylko wtedy, gdy z API ma korzystać też osobny frontend GitHub Pages.
 
 Aby włączyć raporty głosowe na Vercel, ustaw tam również `CREW_PASSWORD` i `NVIDIA_API_KEY`.
+
+## Mapa statku dla gości
+
+W menu wybierz **Mapa statku**. Demo obejmuje 10 miejsc na pokładach 4–6 Wonder of the Seas. Układ miejsc bazuje na [planach Royal Caribbean](https://www.royalcaribbean.com/cruise-ships/wonder-of-the-seas/deck-plans). Geometria korytarzy i odległości są poglądowe. Gość wybiera start z listy albo wskazuje go na mapie, następnie wybiera cel i sposób zmiany pokładu.
+
+**Zarządzaj miejscami** pozwala dodawać, przesuwać i usuwać pinezki. Wejście można wybrać z listy lub wskazać na mapie, gdzie zostanie przypisane do najbliższego korytarza. Z `MONGODB_URI` katalog powstaje przy pierwszym odczycie w kolekcji `shipMaps`. Ustaw osobny sekret `MAP_ADMIN_PASSWORD`, aby zmiany administratora trafiały do bazy i były widoczne dla gości. W trybie demo edycje zapisują się lokalnie w przeglądarce.
