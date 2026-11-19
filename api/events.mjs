@@ -12,6 +12,8 @@ function eventsCollection() {
 
 const validName = name => typeof name === 'string' && name.length > 0 && name.length <= 100 &&
   !['__proto__', 'constructor', 'prototype'].includes(name) && !/[.$\u0000]/u.test(name);
+const validDisplayName = name => name === undefined ||
+  (typeof name === 'string' && name.trim().length > 0 && name.length <= 80 && !/\p{Cc}/u.test(name));
 const validVote = (vote, slots) => Array.isArray(vote) && vote.length > 0 && vote.length <= slots.length &&
   vote.every(index => Number.isInteger(index) && index >= 0 && index < slots.length);
 const send = (res, status, body) => res.writeHead(status, {'Content-Type': 'application/json'}).end(JSON.stringify(body));
@@ -40,6 +42,8 @@ export default async function events(req, res) {
     const body = await readBody(req);
     const id = body?.id;
     if (typeof id !== 'string' || !/^[a-f0-9-]{36}$/.test(id)) return send(res, 400, {error: 'Nieprawidłowe wydarzenie.'});
+    const {displayName} = body;
+    if (!validDisplayName(displayName)) return send(res, 400, {error: 'Nieprawidłowa nazwa wyświetlana.'});
     if (body.action === 'publish') {
       const {title, description, owner, type, slots, capacity, votes} = body;
       if (typeof title !== 'string' || !title.trim() || title.length > 90 ||
@@ -52,6 +56,7 @@ export default async function events(req, res) {
       const collection = await eventsCollection();
       await collection.updateOne({_id: id}, {$setOnInsert: {
         id, title, description, owner, type, slots, capacity, votes: {[owner]: votes[owner]},
+        ...(displayName ? {memberNames: {[owner]: displayName}} : {}),
         revision: 0, createdAt: new Date()
       }}, {upsert: true});
       return send(res, 200, {ok: true});
@@ -65,10 +70,16 @@ export default async function events(req, res) {
     if (vote && !Object.hasOwn(event.votes, member) && Object.keys(event.votes).length >= event.capacity) {
       return send(res, 409, {error: 'Brak wolnych miejsc.'});
     }
-    if (vote === null) delete event.votes[member];
-    else event.votes[member] = vote;
+    const memberNames = event.memberNames ?? {};
+    if (vote === null) {
+      delete event.votes[member];
+      delete memberNames[member];
+    } else {
+      event.votes[member] = vote;
+      if (displayName) memberNames[member] = displayName;
+    }
     const result = await collection.updateOne({_id: id, revision: event.revision},
-      {$set: {votes: event.votes}, $inc: {revision: 1}});
+      {$set: {votes: event.votes, memberNames}, $inc: {revision: 1}});
     if (!result.matchedCount) return send(res, 409, {error: 'Lista zapisów się zmieniła. Spróbuj ponownie.'});
     return send(res, 200, {ok: true});
   } catch (error) {
