@@ -9,6 +9,8 @@
     "start": "node server.mjs"
   },
   "dependencies": {
+    "@grpc/grpc-js": "^1.14.7",
+    "@grpc/proto-loader": "^0.8.1",
     "mongodb": "^6.21.0"
   }
 }

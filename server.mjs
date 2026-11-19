@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import events from './api/events.mjs';
 import workspace from './api/workspace.mjs';
+import { handleDutyRequest, isDutyRoute } from './duty-http.mjs';
 
 const { PORT = '3000' } = process.env;
 
@@ -11,6 +12,8 @@ const assets = new Map([
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
   ['/crew-profiles.js', ['crew-profiles.js', 'text/javascript; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
+  ['/duties.js', ['duties.js', 'text/javascript; charset=utf-8']],
+  ['/voice.js', ['voice.js', 'text/javascript; charset=utf-8']],
   ['/sw.js', ['sw.js', 'text/javascript; charset=utf-8']],
   ['/manifest.webmanifest', ['manifest.webmanifest', 'application/manifest+json']],
   ['/icon.png', ['icon.png', 'image/png']],
@@ -22,10 +25,14 @@ createServer(async (req, res) => {
   try {
     if (path === '/api/events') return await events(req, res);
     if (path === '/api/workspace') return await workspace(req, res);
+    if (isDutyRoute(path)) return await handleDutyRequest(path, req, res);
     const asset = assets.get(path);
     if (req.method !== 'GET' || !asset) return res.writeHead(404).end();
     const [file, contentType] = asset;
-    const body = await readFile(new URL('dist/' + file, import.meta.url));
+    let body = await readFile(new URL('dist/' + file, import.meta.url));
+    if (file === 'index.html') {
+      body = body.toString('utf8').replace('<head>', '<head>\n<meta name="crewconnect-shared" content="yes">');
+    }
     return res.writeHead(200, {'Content-Type': contentType, 'X-Content-Type-Options': 'nosniff'}).end(body);
   } catch (error) {
     console.error('CrewConnect request failed', error.code ?? error.name);
