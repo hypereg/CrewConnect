@@ -54,6 +54,7 @@ let offline = false;
 let cachedAt;
 let connectionError;
 let invite;
+let loginFlow = {email: ''};
 let month;
 let day;
 let adminTab = 'voyages';
@@ -195,8 +196,7 @@ async function loadInvite(token) {
 }
 
 function renderLogin(page) {
-  const emailField = field('Testowy adres e-mail', 'email', '', 'type="email" autocomplete="username" required maxlength="120"');
-  const codeField = field('Kod dostępu', 'code', '', 'type="password" autocomplete="current-password" required maxlength="100"');
+  const emailField = value => field('Adres e-mail', 'email', value, 'type="email" autocomplete="email" required maxlength="120"');
   if (page === 'rejestracja') {
     const login = 'logowanie?kod=' + encodeURIComponent(route().token || '');
     return '<div class="auth-view">' + back(login, 'Mam już konto') +
@@ -206,14 +206,26 @@ function renderLogin(page) {
         (invite.full ? '<p>Wszystkie miejsca w tej kabinie zostały wykorzystane. Jeśli masz już konto, zaloguj się.</p>' +
           '<a class="button secondary" href="#' + login + '">Przejdź do logowania</a>' :
           form('register', field('Nazwa wyświetlana', 'name', '', 'autocomplete="nickname" required maxlength="60"') +
-            emailField, submit(board?.user?.role === 'guest' ? 'Dołącz do rejsu' : 'Utwórz konto')))) :
+            emailField(''), submit(board?.user?.role === 'guest' ? 'Dołącz do rejsu' : 'Utwórz konto')))) :
         empty(invite?.error ? 'Zaproszenie niedostępne' : 'Sprawdzamy zaproszenie', escape(invite?.error || 'To potrwa chwilę.'))) + '</div>';
   }
-  return '<div class="auth-view">' + renderHeading('Życie na pokładzie', 'Zaloguj się, aby zobaczyć wydarzenia swojego rejsu.') +
+  const {email, code, requiresAccessCode} = loginFlow;
+  const loginForm = code || requiresAccessCode ? form('login',
+    '<p>Logujesz się jako <strong>' + escape(email) + '</strong></p>' +
+    (code ? '<aside class="notice login-code-notice" aria-label="Powiadomienie z kodem demo">' +
+      '<strong>Kod logowania demo</strong><p>Ważny przez 10 minut.</p><div class="button-row">' +
+      '<input id="demo-login-code" aria-label="Kod z powiadomienia" readonly value="' + escape(code) + '">' +
+      button('Kopiuj kod', 'copyLoginCode', '', '', 'secondary') + '</div></aside>' +
+      field('Kod sześciocyfrowy', 'code', '', 'inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required maxlength="6"') :
+      field('Kod dostępu', 'code', '', 'type="password" autocomplete="current-password" required maxlength="100"')),
+    submit('Zaloguj się') + (code ? button('Pobierz nowy kod', 'newLoginCode', '', '', 'secondary') : '') +
+    button('Zmień e-mail', 'changeLoginEmail', '', '', 'secondary')) :
+    form('requestLoginCode', emailField(email), submit('Dalej')) +
+    '<p class="input-note">Użyj e-maila podanego przy rejestracji. Kod demo pojawi się na ekranie.</p>';
+  return '<div class="auth-view">' + renderHeading('Zaloguj się') +
     (connectionError ? '<p class="notice warning">' + escape(connectionError) + '</p>' : '') +
-    card('<h2>Zaloguj się</h2>' + form('login', emailField + codeField, submit('Zaloguj się')) +
-      '<p class="input-note">Kod demo dla gości: <strong>123456</strong>.</p>') +
-    card('<h2>Pierwszy raz na pokładzie?</h2><p>Zeskanuj aparatem kod QR dostępny w swojej kabinie.</p>') + '</div>';
+    card(loginForm) +
+    card('<h2>Pierwszy raz na pokładzie?</h2><p>Otwórz link otrzymany od administratora lub zeskanuj kod QR z zaproszenia.</p>') + '</div>';
 }
 
 function eventBadge(event) {
@@ -712,6 +724,44 @@ async function mutate(payload, {message, after, onError} = {}) {
   } finally { operation = false; }
 }
 
+async function requestLoginCode(address, element) {
+  operation = true;
+  requestVersion++;
+  const failure = element.querySelector('.form-error');
+  const controls = [...element.querySelectorAll('button')];
+  controls.forEach(control => { control.disabled = true; });
+  failure.hidden = true;
+  try {
+    if (readLocal(logoutKey) === 'pending') {
+      await request({action: 'logout'});
+      writeLocal(logoutKey, 'done');
+    }
+    const {code, requiresAccessCode} = await request({action: 'requestLoginCode', email: address});
+    if (!element.isConnected) return;
+    loginFlow = {email: address, code, requiresAccessCode};
+    render();
+    content.querySelector('input[name="code"]')?.focus();
+  } catch (error) {
+    failure.textContent = error.status ? error.message : 'Sprawdź połączenie i spróbuj ponownie.';
+    failure.hidden = false;
+  } finally {
+    operation = false;
+    controls.forEach(control => { control.disabled = false; });
+  }
+}
+
+async function copyLoginCode() {
+  const code = content.querySelector('#demo-login-code');
+  try {
+    await navigator.clipboard.writeText(code.value);
+    announce('Skopiowano kod logowania.');
+  } catch {
+    code.focus();
+    code.select();
+    announce('Zaznaczono kod do skopiowania.');
+  }
+}
+
 content.addEventListener('submit', event => {
   const element = event.target.closest('form[data-form]');
   if (!element) return;
@@ -720,7 +770,9 @@ content.addEventListener('submit', event => {
   const data = Object.fromEntries(new FormData(element));
   const action = element.dataset.form;
   const formError = element.querySelector('.form-error');
+  if (action === 'requestLoginCode') return void requestLoginCode(data.email.trim(), element);
   const payload = {action, ...data};
+  if (action === 'login') payload.email = loginFlow.email;
   if (action === 'register') payload.token = route().token;
   if (action === 'addCabins') {
     payload.voyageId = board.voyage.id;
@@ -747,9 +799,15 @@ content.addEventListener('submit', event => {
   buttons.forEach(control => { control.disabled = true; });
   formError.hidden = true;
   const after = {
-    login: () => navigate(route().token && board.user?.role === 'guest' && !board.user.cabin ?
-      'rejestracja?kod=' + encodeURIComponent(route().token) : 'wydarzenia'),
-    register: () => navigate('wydarzenia'),
+    login: () => {
+      loginFlow = {email: ''};
+      navigate(route().token && board.user?.role === 'guest' && !board.user.cabin ?
+        'rejestracja?kod=' + encodeURIComponent(route().token) : 'wydarzenia');
+    },
+    register: () => {
+      loginFlow = {email: ''};
+      navigate('wydarzenia');
+    },
     saveEvent: () => navigate(board.user.role === 'admin' ? 'admin' : 'planner'),
     saveGuestEvent: id => navigate('wydarzenie/' + id)
   }[action];
@@ -763,7 +821,9 @@ content.addEventListener('submit', event => {
 });
 
 async function logout() {
+  operation = true;
   requestVersion++;
+  loginFlow = {email: ''};
   writeLocal(cacheKey, null);
   writeLocal(logoutKey, 'pending');
   updateBoard({user: null});
@@ -773,6 +833,7 @@ async function logout() {
     await request({action: 'logout'});
     if (!board.user) writeLocal(logoutKey, 'done');
   } catch { /* The local marker clears the server session on reconnect. */ }
+  finally { operation = false; }
 }
 
 content.addEventListener('click', event => {
@@ -801,6 +862,14 @@ content.addEventListener('click', event => {
     return;
   }
   if (action === 'logout') return void logout();
+  if (action === 'copyLoginCode') return void copyLoginCode();
+  if (action === 'newLoginCode') return void requestLoginCode(loginFlow.email, control.form);
+  if (action === 'changeLoginEmail') {
+    loginFlow = {email: loginFlow.email};
+    render();
+    content.querySelector('input[name="email"]')?.focus();
+    return;
+  }
   if (offline) return;
   if (action === 'pickMeetingPlace') return openMeetingMap(control);
   if (action === 'chat') return openChat(id);
@@ -852,8 +921,10 @@ function stopSwipe(event) {
 for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) content.addEventListener(name, stopSwipe);
 
 function initRoute() {
-  if (route().page === 'rejestracja') void loadInvite(route().token);
-  else render(true);
+  if (route().page === 'rejestracja') {
+    loginFlow = {email: ''};
+    void loadInvite(route().token);
+  } else render(true);
 }
 function onlineRefresh() {
   if (route().page === 'rejestracja' && invite?.error) void loadInvite(route().token);
