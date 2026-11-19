@@ -4,7 +4,7 @@ import {workspaceId} from '../workspace-session.mjs';
 
 const {MONGODB_URI, MONGODB_DATABASE = 'crewconnect'} = process.env;
 const times = ['12:00', '13:30', '15:00', '17:00', '18:30', '20:00', '21:30'];
-const examples = [
+export const restaurantExamples = [
   {id: 'mesa-horizon', name: 'Mesa Horizon', cuisine: 'Kuchnia europejska', deck: 'Pokład 5',
     description: 'Bistro na wspólny lunch i kolację po wachcie.', tables: [2, 2, 4, 4, 6], theme: 'ocean',
     menu: [{name:'Krem z pieczonych pomidorów', price:1900}, {name:'Dorsz z warzywami', price:4900}, {name:'Sernik cytrynowy', price:1900}]},
@@ -63,7 +63,7 @@ export default async function restaurants(req, res) {
   res.setHeader('Cache-Control','no-store');
   try {
     const session = workspaceId(req);
-    if (!MONGODB_URI && req.method === 'GET') return send(res,200,{restaurants:examples,times,reservations:[],canBook:false});
+    if (!MONGODB_URI && req.method === 'GET') return send(res,200,{restaurants:restaurantExamples,times,reservations:[],canBook:false});
     const db = await database();
     const catalog = db.collection('restaurants');
     const bookings = db.collection('restaurantBookings');
@@ -80,7 +80,7 @@ export default async function restaurants(req, res) {
           {$project:{_id:0,restaurantId:'$_id',average:1,count:1,latest:1}}]).toArray(),
         user ? reviews.find({owner:session},{projection:{_id:0,restaurantId:1,rating:1,comment:1}}).toArray() : []
       ]);
-      return send(res,200,{restaurants:[...examples,...custom],times,reservations,ratings,ownReviews,canBook:Boolean(user)});
+      return send(res,200,{restaurants:[...restaurantExamples,...custom],times,reservations,ratings,ownReviews,canBook:Boolean(user)});
     }
     if (req.method !== 'POST') return send(res,405,{error:'Niedozwolona metoda.'});
     if (!req.headers.origin || req.headers['sec-fetch-site'] === 'cross-site' ||
@@ -105,7 +105,7 @@ export default async function restaurants(req, res) {
       if (typeof restaurantId !== 'string' || !Number.isInteger(rating) || rating < 1 || rating > 5 || comment.length > 360) {
         return send(res,400,{error:'Podaj ocenę od 1 do 5 i komentarz do 360 znaków.'});
       }
-      if (!examples.some(item => item.id === restaurantId) && !await catalog.findOne({_id:restaurantId})) {
+      if (!restaurantExamples.some(item => item.id === restaurantId) && !await catalog.findOne({_id:restaurantId})) {
         return send(res,404,{error:'Nie znaleziono restauracji.'});
       }
       await reviews.updateOne({_id:session+':'+restaurantId},{$set:{
@@ -118,7 +118,7 @@ export default async function restaurants(req, res) {
     if (typeof restaurantId !== 'string' || !validDate(date,time) || !Number.isInteger(guests) || guests < 1 || guests > 6) {
       return send(res,400,{error:'Wybierz przyszły termin do 30 dni i podaj liczbę osób od 1 do 6.'});
     }
-    const restaurant = examples.find(item => item.id === restaurantId) ?? await catalog.findOne({_id:restaurantId});
+    const restaurant = restaurantExamples.find(item => item.id === restaurantId) ?? await catalog.findOne({_id:restaurantId});
     if (!restaurant) return send(res,404,{error:'Nie znaleziono restauracji.'});
     const tableOptions = restaurant.tables.map((size,index) => ({size,table:index+1}))
       .filter(item => item.size >= guests).sort((a,b) => a.size-b.size);
