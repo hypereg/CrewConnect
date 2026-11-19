@@ -9,7 +9,8 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.png">
   <link rel="apple-touch-icon" href="icon.png">
-  <link rel="stylesheet" href="social.css?v=9">
+  <link rel="stylesheet" href="social.css?v=10">
+  <link rel="stylesheet" href="profile.css?v=1">
   <title>CrewConnect — Wydarzenia na rejsie</title>
 </head>
 <body>
@@ -19,14 +20,14 @@
     <nav id="navigation" class="app-nav" aria-label="Menu główne" hidden></nav>
     <div id="sidebar-profile" class="sidebar-profile" hidden>
       <span id="sidebar-user-name"></span>
-      <a id="sidebar-account" href="#konto">Mój profil</a>
+      <a id="sidebar-account" href="#profil">Mój profil</a>
     </div>
   </aside>
   <header class="app-header">
     <span id="trip-label"></span>
     <div class="header-context">
       <a id="ship-map-link" class="button secondary" href="#mapa">Mapa statku</a>
-      <a id="role-link" class="button secondary" hidden></a>
+      <a id="role-link" class="button secondary" href="#planner" hidden>Panel plannera</a>
     </div>
   </header>
   <main id="content" tabindex="-1"></main>
@@ -47,6 +48,7 @@
       document.querySelector('#content').append(document.querySelector('#file-help').content.cloneNode(true));
     }
   </script>
-  <script type="module" src="social.js?v=10"></script>
+  <script src="profile.js?v=1" defer></script>
+  <script type="module" src="social.js?v=11"></script>
 </body>
 </html>

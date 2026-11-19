@@ -433,7 +433,7 @@ function renderPeople() {
     !offline && user.role === 'guest' ? button('Usuń historię dopasowań', 'resetMatches', '', '', 'secondary') : '') +
     (offline ? empty('Dopasowania są dostępne online') : user.role !== 'guest' ? empty('Dopasowania są dostępne dla gości rejsu') :
       !user.visible ? card('<h2>Pokaż swój profil</h2><p>Po włączeniu widoczności możesz przeglądać karty i zobaczyć wzajemne dopasowania.</p>' +
-        '<a class="button primary" href="#konto">Ustaw widoczność profilu</a>', 'empty') :
+        '<a class="button primary" href="#profil">Ustaw widoczność profilu</a>', 'empty') :
         '<div class="people-grid"><div>' + (candidate ?
           card('<div class="portrait">' + escape(initials(candidate.name)) + '</div><div class="person-content"><h2>' +
             escape(candidate.name) + (candidate.age ? ', ' + escape(candidate.age) : '') + '</h2>' +
@@ -454,22 +454,26 @@ function initials(name) {
   return name.trim().split(/\s+/).slice(0, 2).map(part => [...part][0]).join('').toUpperCase();
 }
 
-function account() {
+function renderAccountProfile() {
   const user = board.user;
   const guest = user.role === 'guest';
-  return '<div class="form-view">' + renderHeading('Konto') +
-    (offline ? empty('Profil jest dostępny online') :
-      card('<div class="account-head"><span class="avatar">' + escape(initials(user.name)) + '</span><div><h2>' +
-        escape(user.name) + '</h2>' + (user.cabin ? '<p>Kabina ' + escape(user.cabin) + '</p>' : '') + '</div></div>' +
-        (user.role === 'admin' || !board.voyage ? '' : form('profile',
-          field('Nazwa wyświetlana', 'name', user.name, 'required maxlength="60"') +
-          (guest ? field('Wiek (opcjonalnie)', 'age', user.age ?? '', 'type="number" min="18" max="120" step="1" inputmode="numeric"') +
-            field('Rola na pokładzie', 'roleOnShip', user.roleOnShip, 'maxlength="60"') +
-            textarea('O mnie', 'bio', user.bio, 'maxlength="240"') +
-            field('Zainteresowania (oddziel przecinkami)', 'interests', user.interests.join(', '), 'maxlength="160"') +
-            '<label class="check"><input name="visible" type="checkbox" ' + (user.visible ? 'checked' : '') +
-            '> Pokaż mój profil w „Poznaj załogę”</label>' : ''), submit('Zapisz profil'))))) +
-    '<div class="account-footer">' + button('Wyloguj się', 'logout', '', '', 'secondary') + '</div></div>';
+  const actions = button('Wyloguj się', 'logout', '', '', 'secondary');
+  if (offline) return renderMyProfile({details: '<p>Profil jest dostępny online</p>', actions});
+  const editForm = user.role !== 'admin' && board.voyage ? form('profile',
+    field('Nazwa wyświetlana', 'name', user.name, 'required maxlength="60"') +
+    (guest ? field('Wiek (opcjonalnie)', 'age', user.age ?? '', 'type="number" min="18" max="120" step="1" inputmode="numeric"') +
+      field('Rola na pokładzie', 'roleOnShip', user.roleOnShip, 'maxlength="60"') +
+      textarea('O mnie', 'bio', user.bio, 'maxlength="240"') +
+      field('Zainteresowania (oddziel przecinkami)', 'interests', user.interests.join(', '), 'maxlength="160"') +
+      '<label class="check"><input name="visible" type="checkbox" ' + (user.visible ? 'checked' : '') +
+      '> Pokaż mój profil w „Poznaj załogę”</label>' : ''), submit('Zapisz profil')) : '';
+  return renderMyProfile({
+    name: escape(user.name),
+    avatar: escape(initials(user.name)),
+    details: (user.cabin ? '<p>Kabina ' + escape(user.cabin) + '</p>' : '') + editForm,
+    actions,
+    administrationHref: user.role === 'admin' ? '#admin' : ''
+  });
 }
 
 function planner() {
@@ -540,8 +544,8 @@ function renderAdmin() {
 
 function render(focus = false) {
   const {page, id, date} = route();
-  if (['aktywnosci', 'raporty', 'plan-zalogi', 'dziennik-raportow', 'zaloga', 'profil'].includes(page)) {
-    const target = {zaloga: 'poznaj', profil: 'konto'}[page] || 'wydarzenia';
+  if (['aktywnosci', 'raporty', 'plan-zalogi', 'dziennik-raportow', 'zaloga', 'konto'].includes(page)) {
+    const target = {zaloga: 'poznaj', konto: 'profil'}[page] || 'wydarzenia';
     history.replaceState(null, '', '#' + target);
     return render(focus);
   }
@@ -554,14 +558,10 @@ function render(focus = false) {
       (parent === key ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') + '</div>' : '';
   sidebarProfile.hidden = !displayNav;
   sidebarUserName.textContent = displayNav ? user.name || '' : '';
-  if (displayNav && page === 'konto') sidebarAccount.setAttribute('aria-current', 'page');
+  if (displayNav && (page === 'profil' || (page === 'admin' && user.role === 'admin'))) sidebarAccount.setAttribute('aria-current', 'page');
   else sidebarAccount.removeAttribute('aria-current');
   mapLink.hidden = displayNav;
-  roleLink.hidden = !displayNav || user.role === 'guest';
-  if (!roleLink.hidden) {
-    roleLink.href = user.role === 'admin' ? '#admin' : '#planner';
-    roleLink.textContent = user.role === 'admin' ? 'Panel admina' : 'Panel plannera';
-  }
+  roleLink.hidden = !displayNav || user.role !== 'planner';
   tripLabel.textContent = displayNav ? board.voyage?.name || '' : '';
   connection.hidden = !offline || !displayNav;
   connection.textContent = offline && cachedAt ? 'Offline · dane z ' + new Date(cachedAt).toLocaleString('pl-PL', {dateStyle: 'short', timeStyle: 'short'}) : '';
@@ -570,7 +570,7 @@ function render(focus = false) {
   if (page === 'mapa') renderMap(id);
   else if (page === 'rejestracja' || page === 'logowanie' || (!user && board)) content.innerHTML = renderLogin(page);
   else if (!board) content.innerHTML = empty('Ładujemy CrewConnect');
-  else if (page === 'konto') content.innerHTML = account();
+  else if (page === 'profil') content.innerHTML = renderAccountProfile();
   else if (page === 'admin' && user.role === 'admin') content.innerHTML = renderAdmin();
   else if (page === 'planner' && user.role === 'planner') content.innerHTML = planner();
   else if ((page === 'dodaj' || page === 'edytuj') && user.role !== 'guest') content.innerHTML = renderEventForm(id);
