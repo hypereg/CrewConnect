@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import qrFactory from 'qrcode-generator';
 import { createSocialStore } from '../social-store.mjs';
 import { sharedPlaces } from './places.mjs';
@@ -10,8 +10,9 @@ const dbName = env.SOCIAL_MONGODB_DATABASE || (env.MONGODB_DATABASE || 'crewconn
 const adminEmail = (env.DEMO_ADMIN_EMAIL || 'admin@example.test').trim().toLowerCase();
 const adminCode = env.DEMO_ADMIN_CODE || (hosted ? '' : '12345');
 const secret = env.DEMO_SESSION_SECRET || randomBytes(32);
-const guestCode = '123456';
 const cookieName = 'crew_social_session';
+const loginCookieName = 'crew_social_login';
+const loginCodeSeconds = 600;
 const ttl = 7 * 86400;
 const categories = ['Gry', 'Trening', 'Integracja', 'Inne'];
 const admin = {id: 'admin', email: adminEmail, name: 'Administrator', role: 'admin', active: true};
@@ -48,9 +49,12 @@ function equal(a, b) {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+function readCookie(req, name) {
+  return req.headers.cookie?.split(/;\s*/).find(item => item.startsWith(name + '='))?.slice(name.length + 1);
+}
+
 function session(req, state) {
-  const cookie = req.headers.cookie?.split(/;\s*/).find(item => item.startsWith(cookieName + '='));
-  const [id, expiry, version, signature] = cookie?.slice(cookieName.length + 1).split('.') || [];
+  const [id, expiry, version, signature] = readCookie(req, cookieName)?.split('.') || [];
   if (!(Number(expiry) > Date.now()) || !equal(signature, digest(id + '.' + expiry + '.' + version))) return null;
   const account = id === admin.id ? admin : state.accounts.find(item => item.id === id);
   return account?.active && Number(version) === (account.sessionVersion ?? 0) ? account : null;
@@ -58,8 +62,20 @@ function session(req, state) {
 
 function setSession(res, account) {
   const value = account ? account.id + '.' + (Date.now() + ttl * 1000) + '.' + (account.sessionVersion ?? 0) : '';
-  res.setHeader('Set-Cookie', cookieName + '=' + (value ? value + '.' + digest(value) : '') +
-    '; Path=/; HttpOnly; SameSite=Strict; Max-Age=' + (account ? ttl : 0) + (hosted ? '; Secure' : ''));
+  res.setHeader('Set-Cookie', [
+    cookie(cookieName, value ? value + '.' + digest(value) : '', '/', ttl),
+    cookie(loginCookieName, '', '/api/social', loginCodeSeconds)
+  ]);
+}
+
+function cookie(name, value, path, maxAge) {
+  return name + '=' + value + '; Path=' + path + '; HttpOnly; SameSite=Strict; Max-Age=' +
+    (value ? maxAge : 0) + (hosted ? '; Secure' : '');
+}
+
+function loginBrowser(req) {
+  const token = readCookie(req, loginCookieName);
+  return /^[A-Za-z0-9_-]{32}$/.test(token || '') ? token : null;
 }
 
 function listed(array, id, message) {
@@ -188,13 +204,46 @@ function parseTime(value, timeZone) {
   fail(400, 'Ta godzina nie występuje w strefie czasowej rejsu.');
 }
 
-function login(state, body) {
-  const address = email(body.email);
-  const user = address === admin.email ? admin : state.accounts.find(item => item.email === address);
-  const valid = user?.role === 'admin' ? equal(body.code, adminCode) :
-    user?.role === 'planner' ? equal(digest('planner:' + text(body.code, 100, 'Kod')), user.code) : equal(body.code, guestCode);
-  if (!user?.active || !valid) fail(401, 'Sprawdź adres e-mail i kod.');
+function accountByEmail(state, address) {
+  return address === admin.email ? admin : state.accounts.find(item => item.email === address);
+}
+
+function issueGuestCode(state, address, browser, code) {
+  const user = accountByEmail(state, address);
+  if (user?.role !== 'guest' || !user.active) fail(404, 'Nie znaleziono konta gościa z tym adresem e-mail.');
+  const now = Date.now();
+  const pending = (user.loginCodes || []).filter(item => item.expiresAt > now && item.browser !== browser);
+  user.loginCodes = [...pending.slice(-4), {
+    browser, code: digest('guest-code:' + browser + ':' + code), expiresAt: now + loginCodeSeconds * 1000, attempts: 5
+  }];
+}
+
+function verifyGuestCode(state, address, browser, code) {
+  const user = accountByEmail(state, address);
+  if (user?.role !== 'guest' || !user.active) return null;
+  const challenge = user.loginCodes?.find(item => item.browser === browser);
+  if (!challenge || challenge.expiresAt <= Date.now() || challenge.attempts < 1) return null;
+  if (!equal(challenge.code, digest('guest-code:' + browser + ':' + code))) {
+    challenge.attempts--;
+    return null;
+  }
+  user.loginCodes = user.loginCodes.filter(item => item !== challenge);
   return user.id;
+}
+
+async function login(req, state, body) {
+  const address = email(body.email);
+  const user = accountByEmail(state, address);
+  if (user?.active && user.role === 'admin' && equal(body.code, adminCode)) return user.id;
+  if (user?.active && user.role === 'planner' &&
+      equal(digest('planner:' + text(body.code, 100, 'Kod')), user.code)) return user.id;
+  const token = loginBrowser(req);
+  if (user?.active && user.role === 'guest' && token && typeof body.code === 'string' && /^\d{6}$/.test(body.code)) {
+    const id = await store.change(current => verifyGuestCode(current, address, digest('guest-browser:' + token), body.code));
+    if (id) return id;
+    fail(401, 'Kod jest nieprawidłowy lub wygasł. Możesz pobrać nowy kod.');
+  }
+  fail(401, 'Sprawdź adres e-mail i kod.');
 }
 
 function register(state, body, signedIn) {
@@ -432,8 +481,19 @@ export default async function social(req, res) {
       setSession(res, null);
       return send(200, {user: null});
     }
+    if (body?.action === 'requestLoginCode') {
+      const address = email(body.email);
+      const user = accountByEmail(await store.read(), address);
+      if (!user?.active) fail(404, 'Użyj e-maila podanego przy rejestracji z zaproszenia.');
+      if (staff(user)) return send(200, {requiresAccessCode: true});
+      const token = loginBrowser(req) || randomBytes(24).toString('base64url');
+      const code = String(randomInt(1_000_000)).padStart(6, '0');
+      await store.change(state => issueGuestCode(state, address, digest('guest-browser:' + token), code));
+      res.setHeader('Set-Cookie', cookie(loginCookieName, token, '/api/social', loginCodeSeconds));
+      return send(200, {code});
+    }
     if (body?.action === 'login' || body?.action === 'register') {
-      const id = body.action === 'login' ? login(await store.read(), body) :
+      const id = body.action === 'login' ? await login(req, await store.read(), body) :
         await store.change(state => register(state, body, session(req, state)));
       const state = await store.read();
       const account = id === admin.id ? admin : state.accounts.find(item => item.id === id && item.active);

@@ -1,5 +1,5 @@
-const cacheName = 'crewconnect-shell-social-v29';
-const assets = ['./', 'index.html', 'social.css?v=10', 'social.js?v=12', 'manifest.webmanifest', 'icon.png', 'icon-large.png',
+const cacheName = 'crewconnect-shell-social-v31';
+const assets = ['./', 'index.html', 'social.css?v=11', 'social.js?v=14', 'manifest.webmanifest', 'icon.png', 'icon-large.png',
   'profile.css?v=1', 'profile.js?v=1',
   'legacy.html', 'style.css?v=37', 'voice.js?v=18', 'duties.js?v=27', 'app.js?v=37', 'notifications.js?v=1', 'statistics.js?v=2', 'restaurants.js?v=1',
   'navigation.html', 'ship-map.css?v=6', 'ship-map.mjs?v=8', 'ship-canvas.mjs?v=7', 'ship-data.mjs?v=2'];

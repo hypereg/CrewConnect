@@ -17,25 +17,31 @@ test('shared cruise workflow enforces cabin capacity, event limits and role owne
   await once(server, 'listening');
   const origin = 'http://127.0.0.1:' + server.address().port;
   function client() {
-    let cookie;
+    const cookies = new Map();
     return async (action, data, expected = 200) => {
       const response = await fetch(origin + '/api/social' + (typeof action === 'string' && action.startsWith('?') ? action : ''), {
         method: data ? 'POST' : 'GET',
-        headers: {...(cookie && {cookie}), ...(data && {'Content-Type': 'application/json', origin})},
+        headers: {cookie: [...cookies.values()].join('; '), ...(data && {'Content-Type': 'application/json', origin})},
         ...(data && {body: JSON.stringify({action, ...data})})
       });
-      const nextCookie = response.headers.get('set-cookie');
-      if (nextCookie) cookie = nextCookie.split(';', 1)[0];
+      for (const header of response.headers.getSetCookie()) {
+        const value = header.split(';', 1)[0];
+        const key = value.slice(0, value.indexOf('='));
+        if (value.endsWith('=')) cookies.delete(key);
+        else cookies.set(key, value);
+      }
       const json = await response.json();
-      assert.equal(response.status, expected, JSON.stringify(json));
+      assert.ok([expected].flat().includes(response.status), JSON.stringify(json));
       return json;
     };
   }
-  const admin = client(), planner = client(), otherPlanner = client(), guestA = client(), guestB = client(), extra = client();
+  const admin = client(), planner = client(), otherPlanner = client(), guestB = client(), extra = client();
+  let guestA = client();
   const login = (client, email, code, expected) => client('login', {email, code}, expected);
   const register = (client, token, name, expected) =>
     client('register', {token, email: name.toLowerCase() + '@example.test', name}, expected);
   const invite = url => new URLSearchParams(new URL(url).hash.split('?')[1]).get('kod');
+  assert.deepEqual(await admin('requestLoginCode', {email: 'admin@example.test'}), {requiresAccessCode: true});
   await login(admin, 'admin@example.test', '12345');
   const {voyage} = await admin('createVoyage', {name: 'Rejs testowy', timeZone: 'Europe/Warsaw'});
   const {cabins: [cabin]} = await admin('addCabin', {label: '101', capacity: 2, voyageId: voyage.id});
@@ -54,6 +60,14 @@ test('shared cruise workflow enforces cabin capacity, event limits and role owne
   assert.equal((await register(guestA, firstToken, 'Ala')).user.cabin, '101');
   await register(extra, firstToken, 'Ala', 409);
   assert.equal((await extra()).user, null);
+  const otherCabin = added.cabins.find(item => item.label === 'A12');
+  const {print: otherInvite} = await admin('issueQr', {id: otherCabin.id});
+  const otherToken = invite(otherInvite.url);
+  await register(guestA, otherToken, 'Ala', 409);
+  assert.equal((await guestA()).user.cabin, '101');
+  for (const name of ['Iza', 'Jan']) {
+    assert.equal((await register(client(), otherToken, name)).user.cabin, 'A12');
+  }
   const {print: renewed} = await admin('issueQr', {id: cabin.id});
   await guestB('?invite=' + firstToken, undefined, 404);
   const renewedToken = invite(renewed.url);
@@ -63,6 +77,37 @@ test('shared cruise workflow enforces cabin capacity, event limits and role owne
   const guestName = guest === guestB ? 'Ola' : 'Ewa';
   assert.equal((await guest('?invite=' + renewedToken)).full, true);
   assert.equal((await guestA()).user.cabin, '101');
+
+  await guestA('logout', {});
+  guestA = client();
+  const guestEmail = 'ala@example.test';
+  await guestA('requestLoginCode', {email: 'unknown@example.test'}, 404);
+  await login(guestA, guestEmail, '123456', 401);
+  const issueCode = async () => {
+    const {code} = await guestA('requestLoginCode', {email: '  ALA@Example.Test  '});
+    assert.match(code, /^\d{6}$/);
+    assert.equal((await guestA()).user, null);
+    return code;
+  };
+  let loginCode = await issueCode();
+  await login(client(), guestEmail, loginCode, 401);
+  t.mock.timers.enable({apis: ['Date'], now: Date.now()});
+  try {
+    t.mock.timers.tick(600_001);
+    await login(guestA, guestEmail, loginCode, 401);
+  } finally {
+    t.mock.timers.reset();
+  }
+  loginCode = await issueCode();
+  const wrong = loginCode === '000000' ? '000001' : '000000';
+  for (let attempt = 0; attempt < 5; attempt++) await login(guestA, guestEmail, wrong, 401);
+  await login(guestA, guestEmail, loginCode, 401);
+  loginCode = await issueCode();
+  const attempts = await Promise.all([login(guestA, guestEmail, loginCode, [200, 401]),
+    login(guestA, guestEmail, loginCode, [200, 401])]);
+  assert.equal(attempts.filter(result => result.user?.cabin === '101').length, 1);
+  assert.equal(attempts.filter(result => result.error).length, 1);
+  assert.equal((await guestA()).user.name, 'Ala');
 
   const staffA = await admin('createPlanner', {name: 'Organizator', email: 'planner@example.test'});
   const staffB = await admin('createPlanner', {name: 'Drugi planner', email: 'planner2@example.test'});
