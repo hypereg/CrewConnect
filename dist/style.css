@@ -208,3 +208,21 @@
   .top{min-height:44px;gap:10px;padding:6px 14px;flex-wrap:wrap}
   .top #install{min-height:36px;padding:5px 8px}
 }
+
+.crewconnect-layout{grid-template-rows:minmax(0,1fr) auto}
+.crewconnect-layout>.sidebar{grid-row:1 / span 2}
+.site-footer{grid-column:2;min-width:0;background:var(--navy);color:#d6e4ef;border-block-start:1px solid #31485b}
+.site-footer-inner{max-width:1230px;margin:auto;padding:24px clamp(18px,4vw,54px);display:flex;align-items:center;justify-content:space-between;gap:18px 36px}
+.site-footer-identity p{margin:6px 0 0;color:#a8bfd2;font-size:14px}
+.site-footer-links{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:0 18px}
+.site-footer-links a{display:flex;align-items:center;min-height:44px;color:#d6e4ef;font-size:14px;font-weight:650;text-underline-offset:4px;text-decoration-color:#708ba1}
+.site-footer-links a:hover{color:#b2f5ea;text-decoration-color:currentColor}
+@media(max-width:790px){
+  .crewconnect-layout{grid-template-rows:auto minmax(0,1fr) auto}
+  .crewconnect-layout>.sidebar{grid-row:auto}
+  .site-footer{grid-column:1}
+}
+@media(max-width:540px){
+  .site-footer-inner{flex-direction:column;align-items:stretch;gap:12px}
+  .site-footer-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 10px;border-top:1px solid #31485b;padding-top:4px}
+}

@@ -9,10 +9,10 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.png">
 <link rel="apple-touch-icon" href="icon.png">
-<link rel="stylesheet" href="style.css?v=23">
+<link rel="stylesheet" href="style.css?v=24">
 <title>CrewConnect — Na pokładzie</title>
 </head>
-<body>
+<body class="crewconnect-layout">
 <aside class="sidebar" aria-label="CrewConnect">
   <a class="brand" href="#aktywnosci"><span class="logo" aria-hidden="true">⚓</span><span>Crew<span>Connect</span></span></a>
   <button type="button" class="mobile-menu-toggle" aria-expanded="false" aria-controls="mobile-navigation">
@@ -42,6 +42,20 @@
   <header class="top"><span><span class="dot"></span> MV Horizon</span><span id="network">Tryb demo</span><button id="install" class="secondary" hidden>Zainstaluj PWA</button></header>
   <div id="content"></div>
 </main>
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <div class="site-footer-identity">
+      <a class="brand" href="#aktywnosci"><span class="logo" aria-hidden="true">⚓</span><span>Crew<span>Connect</span></span></a>
+      <p>MV Horizon</p>
+    </div>
+    <nav class="site-footer-links" aria-label="Nawigacja w stopce">
+      <a href="#kalendarz">Kalendarz załogi</a>
+      <a href="#zaloga">Poznaj załogę</a>
+      <a href="navigation.html">Mapa statku</a>
+      <a href="#raporty">Moje przydziały</a>
+    </nav>
+  </div>
+</footer>
 <dialog id="dialog"></dialog>
 <div id="notice" role="status" aria-live="polite"></div>
 <script src="voice.js?v=18" defer></script>
