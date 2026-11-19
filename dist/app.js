@@ -233,7 +233,9 @@ function chooseCrewProfile(profile, choice) {
 
 function render() {
   const page = location.hash.slice(1);
-  const reports = page === 'raporty';
+  const reports = isDutyPage(page);
+  document.body.classList.toggle('on-duties', reports);
+  updateNetwork();
   const calendar = page === 'kalendarz';
   const discover = page === 'zaloga';
   document.querySelectorAll('[data-page]').forEach(link => {
@@ -247,7 +249,7 @@ function render() {
   } else if (calendar) {
     content.innerHTML = renderCalendar();
   } else if (reports) {
-    content.innerHTML = renderDuties();
+    content.innerHTML = renderDuties(page);
   } else {
     content.innerHTML = title('Życie na pokładzie', 'Aktywności załogi', 'Zaproponuj wydarzenie i znajdź termin, który pasuje wszystkim zapisanym.', 'event', 'Nowa aktywność') +
       `<div class="stats">${stat(state.events.length, 'Aktywności')}${stat(state.events.filter(event => event.votes[state.member]).length, 'Moje zapisy')}${stat(state.events.filter(event => sharedSlots(event).length).length, 'Uzgodnione terminy')}</div>
@@ -433,17 +435,29 @@ content.addEventListener('change', event => {
   content.querySelector('#crew-gender')?.focus();
 });
 
+content.addEventListener('toggle', event => {
+  const disclosure = event.target;
+  const key = disclosure.dataset?.dutyDisclosure;
+  if (key && disclosure.isConnected) {
+    if (disclosure.open) dutyDisclosures.add(key);
+    else dutyDisclosures.delete(key);
+  }
+}, true);
+
 member.addEventListener('change', () => {
   state.member = member.value;
   save();
 });
 function refreshPage() {
   render();
-  if (location.hash === '#raporty') void loadDuties();
+  if (isDutyPage()) void loadDuties();
 }
-window.addEventListener('hashchange', refreshPage);
+window.addEventListener('hashchange', () => {
+  refreshPage();
+  if (isDutyPage()) window.scrollTo(0, 0);
+});
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && location.hash === '#raporty') void loadDuties();
+  if (!document.hidden && isDutyPage()) void loadDuties();
 });
 window.addEventListener('storage', event => {
   if (event.key === storageKey && event.newValue) {
@@ -452,12 +466,14 @@ window.addEventListener('storage', event => {
   }
 });
 const updateNetwork = () => {
-  document.querySelector('#network').textContent = navigator.onLine ? 'Tryb demo' : 'Demo · offline';
+  const demo = !isDutyPage() || !hostedDuties;
+  document.querySelector('#network').textContent = demo ? (navigator.onLine ? 'Tryb demo' : 'Demo · offline') :
+    (navigator.onLine ? 'Online' : 'Offline');
 };
 window.addEventListener('online', () => {
   updateNetwork();
   void syncWorkspace();
-  if (location.hash === '#raporty') void loadDuties();
+  if (isDutyPage()) void loadDuties();
 });
 window.addEventListener('offline', updateNetwork);
 window.addEventListener('beforeinstallprompt', event => {
@@ -471,6 +487,5 @@ window.addEventListener('beforeinstallprompt', event => {
 });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(console.error);
 member.innerHTML = crew.map(name => `<option>${escape(name)}</option>`).join('');
-updateNetwork();
 refreshPage();
 void syncWorkspace();

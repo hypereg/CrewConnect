@@ -3,9 +3,9 @@ const maxReportSeconds = 30;
 function voiceFields() {
   return `<fieldset class="voice-box">
     <legend>Raport głosowy</legend>
-    <p class="muted">Nagraj do 30 sekund. Przycisk „Przygotuj szkic” wysyła nagranie do NVIDIA.</p>
+    <p class="muted">Nagraj do 30 sekund. Po wybraniu „Przygotuj szkic” nagranie trafi do NVIDIA.</p>
     <div class="duty-actions">
-      <button type="button" class="secondary" data-record>Nagraj</button>
+      <button type="button" class="secondary" data-record>Nagraj raport</button>
       <button type="button" class="secondary" data-stop hidden>Zatrzymaj</button>
       <button type="button" class="secondary" data-draft hidden>Przygotuj szkic</button>
     </div>

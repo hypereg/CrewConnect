@@ -9,17 +9,25 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.png">
 <link rel="apple-touch-icon" href="icon.png">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 <title>CrewConnect — Na pokładzie</title>
 </head>
 <body>
 <aside class="sidebar">
-  <a class="brand" href="#aktywnosci"><span class="logo">⚓</span><span>Crew<span>Connect</span><small>Życie na pokładzie</small></span></a>
+  <a class="brand" href="#aktywnosci"><span class="logo" aria-hidden="true">⚓</span><span>Crew<span>Connect</span></span></a>
   <nav aria-label="Menu główne">
-    <a href="#aktywnosci" data-page="aktywnosci"><span aria-hidden="true">▦</span> Aktywności</a>
-    <a href="#kalendarz" data-page="kalendarz"><span aria-hidden="true">▣</span> Kalendarz</a>
-    <a href="#zaloga" data-page="zaloga"><span aria-hidden="true">◇</span> Poznaj załogę</a>
-    <a href="#raporty" data-page="raporty"><span aria-hidden="true">☷</span> Raporty obowiązków</a>
+    <div class="nav-group" role="group" aria-labelledby="nav-life">
+      <p id="nav-life">Życie na pokładzie</p>
+      <a href="#aktywnosci" data-page="aktywnosci">Aktywności</a>
+      <a href="#kalendarz" data-page="kalendarz">Kalendarz</a>
+      <a href="#zaloga" data-page="zaloga">Poznaj załogę</a>
+    </div>
+    <div class="nav-group" role="group" aria-labelledby="nav-duties">
+      <p id="nav-duties">Warty i obowiązki</p>
+      <a href="#raporty" data-page="raporty">Moje przydziały</a>
+      <a href="#plan-zalogi" data-page="plan-zalogi">Plan załogi</a>
+      <a href="#dziennik-raportow" data-page="dziennik-raportow">Dziennik raportów</a>
+    </div>
   </nav>
   <div class="profile"><label for="crew">Profil demonstracyjny</label><select id="crew"></select></div>
 </aside>
@@ -29,8 +37,8 @@
 </main>
 <dialog id="dialog"></dialog>
 <div id="notice" role="status" aria-live="polite"></div>
-<script src="voice.js" defer></script>
-<script src="duties.js" defer></script>
-<script src="app.js?v=9" defer></script>
+<script src="voice.js?v=10" defer></script>
+<script src="duties.js?v=10" defer></script>
+<script src="app.js?v=10" defer></script>
 </body>
 </html>

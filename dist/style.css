@@ -24,36 +24,113 @@
 
 .crew-filter{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:18px}.crew-filter label{font-weight:650}.crew-filter select{border:1px solid #9eb0c1;border-radius:8px;background:white;color:inherit;min-height:42px;padding:6px 10px}
 
-.duty-header,.duty-message{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
-.duty-header p{margin:5px 0 0;font-size:14px}
-.duty-actions,.duty-filters,.duty-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
-.duty-filters{margin:16px 0 20px}
-.duty-profile{display:flex;align-items:center;gap:8px;margin-right:12px;font-weight:650}
-.duty-profile select{border:1px solid #9eb0c1;border-radius:8px;background:white;color:inherit;min-height:42px;padding:6px 10px}
-.duty-filters [aria-pressed="true"]{background:#d8f3eb;color:#164b44;box-shadow:inset 0 0 0 1px #78ad9e}
-.duty-day{margin:0 0 20px}
-.duty-day>h3{margin:0 0 8px;font-size:16px;color:#344b61}
-.duty-day>h3:first-letter{text-transform:uppercase}
-.duty-list{padding:0;overflow:hidden}
-.duty-row{display:grid;grid-template-columns: minmax(8.5rem, .65fr) minmax(10rem, 1fr) minmax(12rem, 1.15fr);align-items:center;gap:16px;padding:15px 18px;border-inline-start:4px solid transparent}
-.duty-row+.duty-row{border-top:1px solid var(--line)}
-.duty-own{background:#f1faf7;border-inline-start-color:var(--accent)}
-.duty-time{font-size:16px;font-variant-numeric:tabular-nums;font-weight:720;color:#244458}
-.duty-kind{font-size:14px;font-weight:700;color:#255f69}
-.duty-details h3{margin:3px 0;font-size:17px;overflow-wrap:anywhere}
-.duty-details p{margin:0;color:var(--muted);font-size:14px}
-.duty-controls .badge,.duty-report-state{white-space:nowrap}
-.duty-planned{background:#edf1f6;color:#38516a}
-.duty-report-state{font-size:14px;color:var(--muted)}
+.sidebar nav{gap:22px}
+.nav-group{display:grid;gap:3px;min-width:0}
+.nav-group p{margin:0 12px 4px;color:#a8bfd2;font-size:.82rem;font-weight:750}
+.sidebar .nav-group a{display:flex;align-items:center;min-height:44px;padding:8px 12px}
+.sidebar .nav-group a:hover{background:#1b3347;color:white}
+.sidebar .nav-group a[aria-current]{background:#214453;color:#b2f5ea;box-shadow:inset 3px 0 #7ee9d5}
+.on-duties .profile{display:none}
+
+.duties-page{max-width:980px}
+.duties-heading,.duty-panel-head,.duty-message,.duty-row-main,.duty-row-footer,.duty-report>header{
+  display:flex;align-items:center;justify-content:space-between;gap:16px
+}
+.duties-heading{flex-wrap:wrap;padding-bottom:18px;border-bottom:1px solid #d3dfe9}
+.duties-heading h1{margin:0;font-size:clamp(2rem,4vw,3rem);letter-spacing:-.05em}
+.duty-account,.duty-profile,.duty-actions,.duty-statuses,.duty-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.duty-profile{color:#344b61;font-size:.875rem;font-weight:700}
+.duty-profile select{
+  max-width:100%;border:1px solid #a6b7c7;border-radius:8px;background:#fff;color:#172538;
+  min-height:44px;padding:7px 10px
+}
+.duty-quiet{
+  background:transparent;border:0;border-radius:8px;color:#275265;min-height:44px;
+  padding:7px 9px;font-size:.875rem;font-weight:700
+}
+.duty-quiet:hover{background:#e5eef4;color:#172538}
+.duty-panel{margin-top:17px}
+.duty-panel-head{margin-bottom:13px;flex-wrap:wrap}
+.duty-panel-end{justify-content:flex-end}
+.duty-panel-meta{margin:0 0 13px;color:var(--muted);font-size:.9rem}
+.duty-panel-head .duty-panel-meta{margin:0}
+.duty-group,.duty-disclosure{margin-top:22px}
+.duty-group-label{font-size:1.13rem;margin:0 0 12px}
+.duty-day{margin-bottom:16px}
+.duty-day>h2,.duty-day>h3{margin:0 0 8px;font-size:.95rem;color:#344b61;font-weight:750}
+.duty-day>h2:first-letter,.duty-day>h3:first-letter{text-transform:uppercase}
+.duty-list,.duty-report-list{display:grid;gap:8px}
+.duty-row,.duty-report,.duty-empty{
+  min-width:0;padding:16px 19px;border:1px solid var(--line);border-radius:13px;background:white
+}
+.duty-row-main{align-items:flex-start}
+.duty-row-footer{flex-wrap:wrap;gap:10px;margin-top:12px;padding-top:11px;border-top:1px solid #e4edf4}
+.duty-details,.duty-report>header>div{min-width:0}
+.duty-details h2,.duty-details h3,.duty-details h4,.duty-report h3{
+  margin:4px 0;font-size:1.12rem;line-height:1.25;letter-spacing:-.02em;overflow-wrap:anywhere
+}
+.duty-time{color:#244458;font-size:1rem;font-variant-numeric:tabular-nums;font-weight:760;text-align:right}
+.duty-time time{white-space:nowrap}
+.duty-kind,.duty-person{margin:0;color:var(--muted);font-size:.875rem;overflow-wrap:anywhere}
+.duty-kind{display:flex;align-items:center;gap:6px;color:#29566b;font-weight:730}
+.duty-kind::before{content:"";width:8px;height:8px;border-radius:2px;background:#58849b}
+.duty-kind-watch::before{border-radius:50%;background:#108675}
+.duty-status{
+  display:inline-flex;align-items:center;min-height:27px;padding:3px 8px;border-radius:6px;
+  background:#edf2f6;color:#344e62;font-size:.82rem;font-weight:710
+}
+.duty-status-done{background:#e0f3ea;color:#1d604d}
+.duty-status-waiting{background:#fff0d9;color:#744a11}
+.duty-spotlight{border-color:#9fcfc6;padding:20px 23px;background:linear-gradient(145deg,#fff 30%,#e9f7f3)}
+.duty-spotlight-label{margin:0 0 14px;color:#176456;font-size:.9rem;font-weight:750}
+.duty-spotlight .duty-details h2{font-size:clamp(1.32rem,2.6vw,1.7rem)}
+.duty-spotlight .duty-time{font-size:clamp(1.03rem,2.2vw,1.35rem)}
+.duty-spotlight-date{margin-bottom:3px;color:#436371;font-size:.875rem;font-weight:650}
+.duty-spotlight-date:first-letter{text-transform:uppercase}
+.duty-spotlight .duty-row-footer{border-color:#c9e2dc;margin-top:16px;padding-top:14px}
+.duty-controls .primary,.duty-controls .secondary{min-height:44px}
+.duty-controls .secondary:hover,.duty-empty a:hover{background:#dbe8f1}
+.duty-disclosure{border-top:1px solid #d3dfe9}
+.duty-disclosure summary{padding:12px 0;color:#244458;font-weight:740;cursor:pointer}
+.duty-disclosure summary span{color:var(--muted);font-weight:600}
+.duty-report>header{align-items:flex-start}
+.duty-report .report-notes{margin:12px 0 0;line-height:1.55}
+.duty-report footer{margin-top:6px}
+.duty-empty p,.duty-message p{margin:0}
+.duty-empty a{display:inline-grid;place-items:center;margin-top:12px;text-decoration:none}
 .duty-message{margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:12px;background:white}
-.duty-dates{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.duty-dates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.duty-report-context{display:grid;gap:4px;padding:11px 13px;border-left:3px solid var(--accent);border-radius:6px;background:#edf6f5}
+.duty-report-context span,.duty-voice-unavailable{color:var(--muted);font-size:.875rem}
 .report-notes{white-space:pre-wrap;overflow-wrap:anywhere}
-.voice-box{display:grid;gap:8px;padding:12px}
+.voice-box{display:grid;gap:10px;padding:12px;background:#f5faf9;border-color:#c5ded7}
 .voice-box legend{font-weight:700}
-.voice-box p,.form-error{margin:0}
+.voice-box p,.form-error,.duty-voice-unavailable{margin:0}
 .voice-box audio{width:100%;height:42px}
 .voice-box [data-suggestion]{border-top:1px solid var(--line);padding-top:8px}
 .voice-box [data-suggestion] button{margin-top:8px}
 .form-error{color:#982b3f}
-@media(max-width:980px){.duty-row{grid-template-columns:minmax(8rem,.6fr) minmax(0,1fr)}.duty-controls{grid-column:2}}
-@media(max-width:540px){.duty-row{grid-template-columns:1fr;gap:7px;padding:12px}.duty-controls{grid-column:auto}.duty-dates{grid-template-columns:1fr}.duty-header{align-items:flex-start}}
+@media(min-width:791px){
+  .sidebar{position:sticky;top:0;align-self:start;height:100dvh;overflow:auto}
+}
+@media(max-width:790px){
+  body{grid-template-rows:auto 1fr}
+  .sidebar nav{display:grid;gap:8px;width:100%}
+  .nav-group{grid-template-columns:repeat(3,minmax(0,1fr));gap:2px}
+  .nav-group p{grid-column:1/-1;margin:0 5px}
+  .sidebar .nav-group a{padding:5px 6px;line-height:1.15;overflow-wrap:anywhere}
+  .sidebar .nav-group a[aria-current]{box-shadow:inset 0 -2px #7ee9d5}
+}
+@media(max-width:540px){
+  .duties-heading{gap:10px;padding-bottom:12px}
+  .duty-account,.duty-profile{gap:6px}
+  .duty-row,.duty-report,.duty-empty,.duty-spotlight{padding:13px}
+  .duty-row-main{flex-direction:column;gap:6px}
+  .duty-time{text-align:left}
+  .duty-spotlight-label{margin-bottom:9px}
+  .duty-row:not(.duty-row-plan) .duty-controls{width:100%}
+  .duty-controls .primary,.duty-controls .secondary{flex:1;padding-inline:7px}
+  .duty-report>header{gap:8px;flex-wrap:wrap}
+  .duty-message{align-items:flex-start;flex-direction:column}
+  .duty-dates{grid-template-columns:1fr}
+}

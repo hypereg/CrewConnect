@@ -11,8 +11,14 @@ const dutyStatuses = ['Wykonano', 'W trakcie', 'Wymaga uwagi'];
 let schedule;
 let scheduleError;
 let scheduleRequest = 0;
-let dutyFilter = 'all';
 let completionPending = false;
+const dutyDisclosures = new Set();
+const dutyPages = {
+  raporty: 'Moje przydziały',
+  'plan-zalogi': 'Plan załogi',
+  'dziennik-raportow': 'Dziennik raportów'
+};
+const isDutyPage = (page = location.hash.slice(1)) => Object.hasOwn(dutyPages, page);
 
 function demoSchedule() {
   state.duties ??= [
@@ -78,7 +84,7 @@ async function loadDuties(refreshNotice) {
       sessionStorage.removeItem(dutySessionKey);
     }
   }
-  if (location.hash === '#raporty') render();
+  if (isDutyPage()) render();
 }
 
 function storeDutySession(password, member) {
@@ -113,6 +119,12 @@ function signOutDuty() {
 }
 
 function changeDutyProfile(id) {
+  if (!hostedDuties && crew.includes(id)) {
+    state.member = id;
+    save();
+    content.querySelector('#duty-profile')?.focus();
+    return;
+  }
   const person = schedule?.members.find(item => item.id === id);
   if (!person || !dutySession) return;
   ++scheduleRequest;
@@ -125,91 +137,170 @@ function changeDutyProfile(id) {
 const dutyPerson = (data, id) => escape(data.members.find(person => person.id === id)?.name || id);
 const dutyTime = value => value.slice(11, 16);
 const dutyDate = value => dayLabel.format(new Date(value + 'T12:00'));
+const dutyDateTime = date => calendarDate(date) + 'T' + date.toTimeString().slice(0, 5);
+const dutyShortDate = new Intl.DateTimeFormat('pl-PL', {day: 'numeric', month: 'long'});
+
+function dutyDayLabel(day) {
+  const relative = day === dateValue() ? 'Dzisiaj' : day === dateValue(1) ? 'Jutro' : '';
+  if (relative) return relative + ', ' + dutyShortDate.format(new Date(day + 'T12:00'));
+  return dutyDate(day);
+}
 
 function dutyHours(duty) {
   const nextDay = duty.starts.slice(0, 10) !== duty.ends.slice(0, 10);
-  const end = (nextDay ? formatDate(duty.ends.slice(0, 10)) + ' ' : '') + dutyTime(duty.ends);
-  return `<time datetime="${duty.starts}">${dutyTime(duty.starts)}</time>–<time datetime="${duty.ends}">${end}</time>`;
+  const endDay = nextDay ? ' (' + dutyShortDate.format(new Date(duty.ends.slice(0, 10) + 'T12:00')) + ')' : '';
+  return `<time datetime="${duty.starts}">${dutyTime(duty.starts)}</time> – <time datetime="${duty.ends}">${dutyTime(duty.ends)}${endDay}</time>`;
 }
 
-function dutyRow(duty, data, report) {
+function dutyRow(duty, data, report, {spotlight, editable = false} = {}) {
   const id = escape(duty.id);
   const own = duty.assignee === data.user.id;
-  return `<article class="duty-row${own ? ' duty-own' : ''}">
-    <div class="duty-time">${dutyHours(duty)}</div>
-    <div class="duty-details"><span class="duty-kind">${escape(duty.kind)}</span>
-      <h3>${escape(duty.title)}</h3><p>${dutyPerson(data, duty.assignee)}${own ? ' · Ty' : ''}</p></div>
-    <div class="duty-controls">
-      <span class="badge ${duty.completed ? '' : 'duty-planned'}">${duty.completed ? 'Wykonano' : 'Do wykonania'}</span>
-      ${report ? '<span class="duty-report-state">Raport zapisany</span>' : ''}
-      ${own ? `<button class="secondary" data-action="duty-complete" data-id="${id}" aria-pressed="${Boolean(duty.completed)}"
-        ${completionPending ? 'disabled' : ''}>${duty.completed ? 'Cofnij wykonanie' : 'Oznacz wykonanie'}</button>
-        <button class="secondary" data-action="duty-report" data-id="${id}">${report ? 'Edytuj raport' : 'Dodaj raport'}</button>` : ''}
-      <button class="secondary" data-action="duty-edit" data-id="${id}">Edytuj przydział</button>
-    </div></article>`;
-}
-
-function reportCard(report, owner, editable, local = false) {
-  return `<article class="card">
-    <span class="badge">${escape(report.status)}</span><h3>${escape(report.title)}</h3>
-    <p class="muted">${formatDate(report.date)} · ${owner}</p>
-    ${report.notes ? `<p class="report-notes">${escape(report.notes)}</p>` : ''}
-    ${editable ? `<footer><button class="secondary" data-action="${local ? 'local-report' : 'report'}" data-id="${escape(report.id)}">Edytuj raport</button></footer>` : ''}
+  const heading = spotlight ? 'h2' : editable ? 'h3' : 'h4';
+  const isWatch = duty.kind === 'Warta';
+  return `<article class="duty-row${spotlight ? ' duty-spotlight' : ''}${editable ? ' duty-row-plan' : ''}">
+    ${spotlight ? `<p class="duty-spotlight-label">${spotlight}</p>` : ''}
+    <div class="duty-row-main">
+      <div class="duty-details">
+        <p class="duty-kind${isWatch ? ' duty-kind-watch' : ''}">${escape(duty.kind)}</p>
+        <${heading}>${escape(duty.title)}</${heading}>
+        ${editable ? `<p class="duty-person">${dutyPerson(data, duty.assignee)}${own ? ' · Ty' : ''}</p>` : ''}
+      </div>
+      <div class="duty-time">
+        ${spotlight ? `<div class="duty-spotlight-date">${dutyDayLabel(duty.starts.slice(0, 10))}</div>` : ''}
+        ${dutyHours(duty)}
+      </div>
+    </div>
+    <div class="duty-row-footer">
+      <div class="duty-statuses">
+        <span class="duty-status${duty.completed ? ' duty-status-done' : ''}">${duty.completed ? 'Wykonano' : 'Do wykonania'}</span>
+        ${report ? '<span class="duty-status duty-status-done">Raport zapisany</span>' :
+          duty.completed && !spotlight ? '<span class="duty-status duty-status-waiting">Do złożenia raportu</span>' : ''}
+      </div>
+      <div class="duty-controls">
+        ${!editable ? `<button class="${duty.completed || !spotlight ? 'secondary' : 'primary'}" data-action="duty-complete" data-id="${id}"
+          ${completionPending ? 'disabled' : ''}>${duty.completed ? 'Cofnij wykonanie' : 'Oznacz wykonanie'}</button>
+          <button class="${duty.completed && !report ? 'primary' : 'secondary'}" data-action="duty-report" data-id="${id}">${report ? 'Edytuj raport' : 'Złóż raport'}</button>` :
+          `<button class="duty-quiet" data-action="duty-edit" data-id="${id}">Edytuj przydział</button>`}
+      </div>
+    </div>
   </article>`;
 }
 
-function renderDuties() {
-  const data = currentSchedule();
-  const localReports = hostedDuties ? state.reports : [];
-  const localHistory = localReports.length ? `<section class="section"><h2>Raporty w tej przeglądarce</h2><div class="grid">${localReports.map(
-    report => reportCard(report, escape(report.owner), report.owner === state.member, true)
-  ).join('')}</div></section>` : '';
-  const notice = scheduleError ? `<div class="duty-message" role="status">${escape(scheduleError.message)}
-    ${scheduleError.status === 401 ? '<button class="secondary" data-action="duty-login">Zaloguj się</button>' :
-      '<button class="secondary" data-action="duty-refresh">Spróbuj ponownie</button>'}</div>` : '';
-  const hero = title('Dziennik pokładowy', 'Raporty obowiązków', 'Sprawdź plan wart i obowiązków, oznacz wykonanie i złóż raport z dyżuru.', data && 'report', 'Dodaj raport');
-  if (!data) {
-    return hero + (notice || '<p role="status">Wczytywanie harmonogramu…</p>') + localHistory;
-  }
+function reportCard(report, owner, editable, local = false) {
+  const statusClass = report.status === 'Wykonano' ? ' duty-status-done' :
+    report.status === 'Wymaga uwagi' ? ' duty-status-waiting' : '';
+  return `<article class="duty-report">
+    <header><div><h3>${escape(report.title)}</h3>
+      <p class="duty-person"><time datetime="${escape(report.date)}">${formatDate(report.date)}</time> · ${owner}</p></div>
+      <span class="duty-status${statusClass}">${escape(report.status)}</span>
+    </header>
+    ${report.notes ? `<p class="report-notes">${escape(report.notes)}</p>` : ''}
+    ${editable ? `<footer><button class="duty-quiet" data-action="${local ? 'local-report' : 'report'}" data-id="${escape(report.id)}">Edytuj raport</button></footer>` : ''}
+  </article>`;
+}
 
+function dutyDays(items, data, byDuty, editable = false) {
   const groups = new Map();
-  const byDuty = new Map(data.reports.filter(report => report.dutyId).map(report => [report.dutyId, report]));
-  const ordered = [...data.duties].sort((a, b) => a.starts.localeCompare(b.starts));
-  for (const duty of ordered) {
-    if (dutyFilter === 'mine' && duty.assignee !== data.user.id) continue;
+  const heading = editable ? 'h2' : 'h3';
+  for (const duty of items) {
     const day = duty.starts.slice(0, 10);
     if (!groups.has(day)) groups.set(day, []);
-    groups.get(day).push(dutyRow(duty, data, byDuty.get(duty.id)));
+    groups.get(day).push(dutyRow(duty, data, byDuty.get(duty.id), {editable}));
   }
-  const days = Array.from(groups, ([day, rows]) => `<section class="duty-day">
-    <h3><time datetime="${day}">${dutyDate(day)}</time></h3><div class="card duty-list">${rows.join('')}</div></section>`).join('');
+  return [...groups].map(([day, rows]) => `<div class="duty-day">
+    <${heading}><time datetime="${day}">${dutyDayLabel(day)}</time></${heading}><div class="duty-list">${rows.join('')}</div></div>`).join('');
+}
+
+function dutyDisclosure(id, label, count, contents) {
+  if (!count) return '';
+  return `<details class="duty-disclosure" data-duty-disclosure="${id}"${dutyDisclosures.has(id) ? ' open' : ''}>
+    <summary>${label} <span>(${count})</span></summary>${contents}</details>`;
+}
+
+function localDutyHistory() {
+  if (!hostedDuties) return '';
+  return dutyDisclosure('browser-reports', 'Raporty w tej przeglądarce', state.reports.length,
+    `<div class="duty-report-list">${state.reports.map(report =>
+      reportCard(report, escape(report.owner), report.owner === state.member, true)
+    ).join('')}</div>`);
+}
+
+function myDutyPanel(data, ordered, byDuty, now) {
+  const mine = ordered.filter(duty => duty.assignee === data.user.id);
+  const active = mine.find(duty => !duty.completed && duty.starts <= now && duty.ends > now);
+  const awaitingReport = mine.findLast(duty => duty.completed && !byDuty.has(duty.id));
+  const upcoming = mine.find(duty => !duty.completed && duty.starts > now);
+  const featured = active || awaitingReport || upcoming;
+  const label = active ? 'Bieżący przydział' : awaitingReport ? 'Raport do złożenia' : 'Najbliższy przydział';
+  const rest = mine.filter(duty => duty !== featured);
+  const resolved = duty => duty.completed && byDuty.has(duty.id);
+  const done = rest.filter(resolved).reverse();
+  const followUp = rest.filter(duty => !resolved(duty) && (duty.completed || duty.ends <= now)).reverse();
+  const later = rest.filter(duty => !duty.completed && duty.ends > now);
+  return `<section class="duty-panel" aria-labelledby="duty-page-title">
+    <p class="duty-panel-meta">Godziny pokładowe</p>
+    ${featured ? dutyRow(featured, data, byDuty.get(featured.id), {spotlight: label}) : ''}
+    ${followUp.length ? `<div class="duty-group"><h2 class="duty-group-label">Do uzupełnienia</h2>${dutyDays(followUp, data, byDuty)}</div>` : ''}
+    ${later.length ? `<div class="duty-group"><h2 class="duty-group-label">Kolejne przydziały</h2>${dutyDays(later, data, byDuty)}</div>` : ''}
+    ${!featured && !followUp.length && !later.length ? `<div class="duty-empty"><p>${done.length ? 'Wszystkie Twoje przydziały są rozliczone.' : 'Nie masz jeszcze przydziałów.'}</p>
+      <a class="secondary" href="#plan-zalogi">Zobacz plan załogi</a></div>` : ''}
+    ${dutyDisclosure('completed', 'Rozliczone przydziały', done.length, dutyDays(done, data, byDuty))}
+  </section>`;
+}
+
+function crewPlanPanel(data, ordered, byDuty, now) {
+  const today = now.slice(0, 10);
+  const current = ordered.filter(duty => duty.ends.slice(0, 10) >= today);
+  const past = ordered.filter(duty => duty.ends.slice(0, 10) < today).reverse();
+  return `<section class="duty-panel" aria-labelledby="duty-page-title">
+    <header class="duty-panel-head"><p class="duty-panel-meta">Godziny pokładowe</p>
+      <button class="primary" data-action="duty-edit">+ Dodaj przydział</button>
+    </header>
+    ${current.length ? dutyDays(current, data, byDuty, true) : '<div class="duty-empty"><p>Brak przydziałów na dziś i kolejne dni.</p></div>'}
+    ${dutyDisclosure('past', 'Wcześniejsze przydziały', past.length, dutyDays(past, data, byDuty, true))}
+  </section>`;
+}
+
+function dutyJournal(data) {
   const reports = [...data.reports].sort((a, b) => b.date.localeCompare(a.date)).map(report =>
     reportCard(report, dutyPerson(data, report.owner), report.owner === data.user.id)
   ).join('');
-  return hero + notice + `
-    <section class="section duty-schedule" aria-labelledby="duty-heading">
-      <header class="duty-header"><div><h2 id="duty-heading">Harmonogram wart i obowiązków</h2>
-        <p class="muted">${escape(data.user.name)} · godziny pokładowe${hostedDuties ? '' : ' · dane demonstracyjne'}</p></div>
-        <div class="duty-actions">
-          ${hostedDuties ? '<button class="secondary" data-action="duty-refresh">Odśwież</button>' : ''}
-          <button class="primary" data-action="duty-edit">+ Dodaj przydział</button>
-          ${hostedDuties ? '<button class="secondary" data-action="duty-logout">Wyloguj</button>' : ''}
-        </div>
-      </header>
-      <div class="duty-filters" role="group" aria-label="Pokaż przydziały">
-        ${hostedDuties ? `<label class="duty-profile" for="duty-profile">Twój profil
+  return `<section class="duty-panel" aria-labelledby="duty-page-title">
+    <header class="duty-panel-head duty-panel-end">
+      <button class="secondary" data-action="report">+ Raport bez przydziału</button>
+    </header>
+    ${reports ? `<div class="duty-report-list">${reports}</div>` : '<div class="duty-empty"><p>Nie zapisano jeszcze żadnego raportu.</p></div>'}
+    ${localDutyHistory()}
+  </section>`;
+}
+
+function renderDuties(page) {
+  const data = currentSchedule();
+  const heading = `<h1 id="duty-page-title">${dutyPages[page]}</h1>`;
+  const notice = scheduleError && `<div class="duty-message"><p role="status">${escape(scheduleError.message)}</p>
+    ${scheduleError.status === 401 ? '<button class="primary" data-action="duty-login">Zaloguj się</button>' :
+      '<button class="secondary" data-action="duty-refresh">Spróbuj ponownie</button>'}</div>`;
+  if (!data) {
+    return `<div class="duties-page"><header class="duties-heading">${heading}</header>
+      ${notice || '<p role="status">Wczytywanie harmonogramu…</p>'}${localDutyHistory()}</div>`;
+  }
+  const now = dutyDateTime(new Date());
+  const ordered = [...data.duties].sort((a, b) => a.starts.localeCompare(b.starts));
+  const byDuty = new Map(data.reports.filter(report => report.dutyId).map(report => [report.dutyId, report]));
+  const panel = page === 'raporty' ? myDutyPanel(data, ordered, byDuty, now) :
+    page === 'plan-zalogi' ? crewPlanPanel(data, ordered, byDuty, now) : dutyJournal(data);
+  return `<div class="duties-page">
+    <header class="duties-heading">${heading}
+      <div class="duty-account">
+        <label class="duty-profile">Profil załogi
           <select id="duty-profile">${data.members.map(person => `<option value="${escape(person.id)}"${person.id === data.user.id ? ' selected' : ''}>${escape(person.name)}</option>`).join('')}</select>
-        </label>` : ''}
-        <button class="secondary" data-action="duty-filter" data-id="all" aria-pressed="${dutyFilter === 'all'}">Cała załoga</button>
-        <button class="secondary" data-action="duty-filter" data-id="mine" aria-pressed="${dutyFilter === 'mine'}">Moje przydziały</button>
+        </label>
+        ${hostedDuties ? '<button class="duty-quiet" data-action="duty-refresh">Odśwież</button><button class="duty-quiet" data-action="duty-logout">Wyloguj</button>' : ''}
       </div>
-      ${days || '<p class="empty">Brak przydziałów w tym widoku.</p>'}
-    </section>
-    <section class="section"><h2>Dziennik załogi</h2>
-      <div class="stats">${stat(data.reports.length, 'Wszystkie raporty')}${stat(data.reports.filter(report => report.status === 'Wykonano').length, 'Wykonane')}${stat(data.reports.filter(report => report.status === 'Wymaga uwagi').length, 'Wymagają uwagi')}</div>
-      <div class="grid">${reports || '<p class="empty">Brak raportów.</p>'}</div>
-    </section>
-    ${localHistory}`;
+    </header>
+    ${notice || ''}
+    ${panel}
+  </div>`;
 }
 
 function editDuty(data, duty) {
@@ -217,8 +308,11 @@ function editDuty(data, duty) {
   const assigned = duty?.assignee || data.user.id;
   const hasReport = data.reports.some(report => report.dutyId === id);
   const locked = duty?.completed || hasReport;
-  const start = duty?.starts || dateValue() + 'T08:00';
-  const end = duty?.ends || dateValue() + 'T12:00';
+  const nextHour = new Date();
+  nextHour.setHours(nextHour.getHours() + 1, 0, 0, 0);
+  const start = duty?.starts || dutyDateTime(nextHour);
+  nextHour.setHours(nextHour.getHours() + 1);
+  const end = duty?.ends || dutyDateTime(nextHour);
   openForm(duty ? 'Edytuj przydział' : 'Nowy przydział', `
     <label>Rodzaj <select name="kind">${['Warta', 'Obowiązek'].map(kind =>
       `<option${duty?.kind === kind ? ' selected' : ''}>${kind}</option>`
@@ -260,15 +354,16 @@ function editDutyReport(data, report, duty, local = false) {
   const id = duty?.id || report?.id || crypto.randomUUID();
   const reportTitle = duty?.title || report?.title || '';
   const day = duty?.starts.slice(0, 10) || report?.date || dateValue();
-  openForm(report ? 'Edytuj raport' : 'Nowy raport', `
-    ${duty ? `<div class="note"><strong>${escape(duty.title)}</strong><br>${dutyDate(day)} · ${dutyHours(duty)}</div>` : `
+  openForm(report ? 'Edytuj raport' : duty ? 'Złóż raport z przydziału' : 'Raport bez przydziału', `
+    ${duty ? `<div class="duty-report-context"><strong>${escape(duty.title)}</strong><span>${dutyDayLabel(day)} · ${dutyHours(duty)}</span></div>` : `
       <label>Obowiązek <input name="title" required maxlength="100" value="${escape(reportTitle)}"></label>
       <label>Data <input name="date" type="date" required value="${escape(day)}"></label>`}
-    <label>Status <select name="status">${dutyStatuses.map(status =>
+    ${!local && hostedDuties && data?.voiceEnabled ? voiceFields() : ''}
+    <label>Treść raportu <textarea name="notes" rows="4" maxlength="1000">${escape(report?.notes || '')}</textarea></label>
+    ${!local && hostedDuties && !data?.voiceEnabled ? '<p class="muted duty-voice-unavailable">Nagrywanie będzie dostępne po konfiguracji NVIDIA.</p>' : ''}
+    <label>Status obowiązku <select name="status">${dutyStatuses.map(status =>
       `<option${status === (report?.status || (duty && !duty.completed ? 'W trakcie' : 'Wykonano')) ? ' selected' : ''}>${status}</option>`
-    ).join('')}</select></label>
-    ${!local && hostedDuties ? data?.voiceEnabled ? voiceFields() : '<p class="muted">Raport głosowy będzie dostępny po konfiguracji NVIDIA.</p>' : ''}
-    <label>Treść raportu <textarea name="notes" rows="4" maxlength="1000">${escape(report?.notes || '')}</textarea></label>`,
+    ).join('')}</select></label>`,
   'Zapisz raport', async fields => {
     const title = (duty ? reportTitle : fields.get('title')).trim();
     if (!title) throw new Error('Wpisz nazwę obowiązku.');
@@ -311,11 +406,6 @@ async function handleDutyAction(button) {
   if (!data) return;
   const duty = data.duties.find(item => item.id === id);
   const report = data.reports.find(item => item.owner === data.user.id && item.dutyId === duty?.id);
-  if (action === 'duty-filter') {
-    dutyFilter = id;
-    render();
-    content.querySelector('[data-action="duty-filter"][aria-pressed="true"]')?.focus();
-  }
   if (action === 'duty-edit' && (!id || duty)) editDuty(data, duty);
   if (action === 'report') {
     const existing = data.reports.find(item => item.id === id && item.owner === data.user.id);
@@ -344,5 +434,7 @@ async function handleDutyAction(button) {
       render();
     }
   }
-  content.querySelector(`[data-action="duty-complete"][data-id="${CSS.escape(id)}"]`)?.focus();
+  const control = content.querySelector(`[data-action="duty-complete"][data-id="${CSS.escape(id)}"]`);
+  const collapsed = control?.closest('details:not([open])');
+  (collapsed?.querySelector('summary') || control)?.focus();
 }
