@@ -116,9 +116,11 @@ export default async function connections(req, res) {
       }
       const target = {id: body.messageId, sender: me, deletedAt: {$exists: false}};
       const update = body.action === 'editMessage' ?
-        {$set: {'messages.$.text': text, 'messages.$.editedAt': new Date()}, $unset: {[typingKey]: ''}} :
-        {$set: {'messages.$.deletedAt': new Date()}, $unset: {'messages.$.text': '', [typingKey]: ''}};
-      const result = await matches.updateOne({...thread, messages: {$elemMatch: target}}, update);
+        {$set: {'messages.$[target].text': text, 'messages.$[target].editedAt': new Date()}, $unset: {[typingKey]: ''}} :
+        {$set: {'messages.$[target].deletedAt': new Date()}, $unset: {'messages.$[target].text': '', [typingKey]: ''}};
+      const result = await matches.updateOne({...thread, messages: {$elemMatch: target}}, update, {
+        arrayFilters: [{'target.id': target.id, 'target.sender': target.sender, 'target.deletedAt': target.deletedAt}]
+      });
       return result.matchedCount ? send(res, 200, {ok: true}) :
         send(res, 404, {error: 'Możesz zmieniać tylko własne, nieusunięte wiadomości.'});
     }
