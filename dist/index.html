@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101c2d">
+<meta name="description" content="Aktywności i raporty obowiązków załogi na statku">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="stylesheet" href="style.css">
+<title>CrewConnect — Na pokładzie</title>
+</head>
+<body>
+<aside class="sidebar">
+  <a class="brand" href="#aktywnosci"><span class="logo">⚓</span><span>Crew<span>Connect</span><small>Życie na pokładzie</small></span></a>
+  <nav aria-label="Menu główne">
+    <a href="#aktywnosci" data-page="aktywnosci"><span aria-hidden="true">▦</span> Aktywności</a>
+    <a href="#raporty" data-page="raporty"><span aria-hidden="true">☷</span> Raporty obowiązków</a>
+  </nav>
+  <div class="profile"><label for="crew">Profil demonstracyjny</label><select id="crew"><option>Marek Nowak</option><option>Anna Kowalska</option><option>Piotr Zieliński</option></select></div>
+</aside>
+<main>
+  <header class="top"><span><span class="dot"></span> MV Horizon</span><span id="network">Tryb demo</span><button id="install" class="secondary" hidden>Zainstaluj PWA</button></header>
+  <div id="content"></div>
+</main>
+<dialog id="dialog"></dialog>
+<div id="notice" role="status" aria-live="polite"></div>
+<script src="app.js" defer></script>
+</body>
+</html>
