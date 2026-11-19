@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import events from './api/events.mjs';
+import places from './api/places.mjs';
 import connections from './api/connections.mjs';
 import workspace from './api/workspace.mjs';
 import social from './api/social.mjs';
@@ -18,6 +19,11 @@ const assets = new Map([
   ['/social.css', ['social.css', 'text/css; charset=utf-8']],
   ['/duties.js', ['duties.js', 'text/javascript; charset=utf-8']],
   ['/voice.js', ['voice.js', 'text/javascript; charset=utf-8']],
+  ['/navigation.html', ['navigation.html', 'text/html; charset=utf-8']],
+  ['/ship-map.css', ['ship-map.css', 'text/css; charset=utf-8']],
+  ['/ship-map.mjs', ['ship-map.mjs', 'text/javascript; charset=utf-8']],
+  ['/ship-canvas.mjs', ['ship-canvas.mjs', 'text/javascript; charset=utf-8']],
+  ['/ship-data.mjs', ['ship-data.mjs', 'text/javascript; charset=utf-8']],
   ['/sw.js', ['sw.js', 'text/javascript; charset=utf-8']],
   ['/manifest.webmanifest', ['manifest.webmanifest', 'application/manifest+json']],
   ['/icon.png', ['icon.png', 'image/png']],
@@ -28,6 +34,7 @@ createServer(async (req, res) => {
   const path = req.url.split('?')[0];
   try {
     if (path === '/api/events') return await events(req, res);
+    if (path === '/api/places') return await places(req, res);
     if (path === '/api/connections') return await connections(req, res);
     if (path === '/api/workspace') return await workspace(req, res);
     if (path === '/api/social') return await social(req, res);

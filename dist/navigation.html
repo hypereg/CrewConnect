@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#102a31">
+  <meta name="crewconnect-api" content="">
+  <link rel="icon" href="icon.png">
+  <link rel="stylesheet" href="ship-map.css">
+  <title>Mapa statku — CrewConnect</title>
+</head>
+<body>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <a class="map-brand" href="./"><span aria-hidden="true">⌖</span> CrewConnect</a>
+      <nav class="modes" aria-label="Tryb mapy">
+        <button type="button" id="guest-mode" aria-pressed="true">Dla gości</button>
+        <button type="button" id="admin-mode" aria-pressed="false">Zarządzaj miejscami</button>
+      </nav>
+    </div>
+  </header>
+  <main class="map-page">
+    <div class="map-heading">
+      <div><p>Wonder of the Seas</p><h1>Mapa statku</h1></div>
+      <a href="https://www.royalcaribbean.com/cruise-ships/wonder-of-the-seas/deck-plans" target="_blank" rel="noopener">Oficjalny plan pokładów ↗</a>
+    </div>
+    <div class="map-layout">
+      <aside class="controls" id="guest-panel" aria-labelledby="planner-title">
+        <h2 id="planner-title">Zaplanuj przejście</h2>
+        <div class="field">
+          <label for="origin">Punkt startowy</label>
+          <select id="origin"></select>
+          <button type="button" class="text-button" id="pick-origin" aria-pressed="false">Wskaż start na mapie</button>
+        </div>
+        <fieldset class="field transport">
+          <legend>Zmiana pokładu</legend>
+          <div class="segments">
+            <label><input type="radio" name="transport" value="lift" checked><span>Winda</span></label>
+            <label><input type="radio" name="transport" value="stairs"><span>Schody</span></label>
+          </div>
+        </fieldset>
+        <div class="field places-field">
+          <label for="place-search">Dokąd chcesz iść?</label>
+          <input id="place-search" type="search" placeholder="Szukaj, np. kasyno" autocomplete="off">
+          <ul class="places-list" id="guest-places"></ul>
+        </div>
+      </aside>
+      <aside class="controls" id="admin-panel" aria-labelledby="admin-title" hidden>
+        <h2 id="admin-title">Miejsca na statku</h2>
+        <p class="storage-note" id="storage-note"></p>
+        <div class="field" id="admin-auth" hidden>
+          <label for="map-password">Hasło administratora mapy</label>
+          <input id="map-password" type="password" autocomplete="current-password" maxlength="256">
+        </div>
+        <div class="catalog-field">
+          <label for="catalog">Wybierz miejsce do edycji</label>
+          <select id="catalog"></select>
+        </div>
+        <form id="place-form">
+          <div class="field">
+            <label for="place-name">Nazwa miejsca</label>
+            <input id="place-name" name="name" maxlength="64" required>
+          </div>
+          <div class="field-pair">
+            <div class="field"><label for="place-category">Kategoria</label><select id="place-category" name="category"></select></div>
+            <div class="field"><label for="place-deck">Pokład</label><select id="place-deck" name="deck"></select></div>
+          </div>
+          <div class="field">
+            <label for="place-entry">Wejście od korytarza</label>
+            <select id="place-entry"></select>
+            <button type="button" class="text-button" id="pick-place" aria-pressed="false">Zaznacz wejście na mapie</button>
+          </div>
+          <div class="field">
+            <label for="place-description">Opis</label>
+            <textarea id="place-description" name="description" rows="2" maxlength="180"></textarea>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="button button-primary" id="save-place">Zapisz miejsce</button>
+            <button type="button" class="text-button danger" id="delete-place" hidden>Usuń miejsce</button>
+          </div>
+        </form>
+        <p id="admin-status" class="admin-status" aria-live="polite"></p>
+      </aside>
+      <div class="map-and-route">
+        <section class="deck-card" aria-labelledby="deck-title">
+          <div class="deck-header">
+            <div><p id="deck-subtitle"></p><h2 id="deck-title"></h2></div>
+            <div class="deck-tabs" id="deck-tabs" aria-label="Pokłady"></div>
+          </div>
+          <p class="pick-banner" id="pick-banner" hidden></p>
+          <div class="map-guidance" id="map-guidance" hidden>
+            <div><p id="map-step-count"></p><strong id="map-instruction"></strong></div>
+            <div class="guidance-controls">
+              <button type="button" class="button" id="previous-step" aria-label="Poprzedni krok">‹</button>
+              <button type="button" class="button button-primary" id="next-step" aria-label="Następny krok">Dalej</button>
+            </div>
+          </div>
+          <div class="map-viewport" id="map-viewport" tabindex="0" aria-label="Mapa pokładu do przewijania">
+            <div class="map-space" id="map-space">
+              <div class="map-stage" id="map-stage">
+                <canvas id="deck-map" width="1920" height="708" aria-hidden="true"></canvas>
+                <div id="map-pins"></div>
+              </div>
+            </div>
+          </div>
+          <div class="deck-footer">
+            <div class="map-legend"><span><i class="legend-dot"></i> Start</span><span><i class="legend-route"></i> Trasa</span><span><i class="legend-pin"></i> Cel</span></div>
+            <span class="map-pan-hint" id="map-pan-hint" hidden>Przeciągnij mapę</span>
+            <div class="zoom" aria-label="Powiększenie mapy">
+              <button type="button" id="zoom-out" aria-label="Pomniejsz mapę">−</button>
+              <button type="button" id="zoom-fit" aria-label="Pokaż cały pokład">Cały pokład</button>
+              <button type="button" id="zoom-in" aria-label="Powiększ mapę">+</button>
+            </div>
+          </div>
+        </section>
+        <section class="route-card" id="route-card" aria-labelledby="route-title"></section>
+        <p class="map-note">Mapa poglądowa pokładów 4–6. Pozycję startową ustawiasz ręcznie. Na statku kieruj się oznaczeniami pokładowymi.</p>
+      </div>
+    </div>
+    <p id="map-status" class="sr-only" role="status"></p>
+  </main>
+  <script type="module" src="ship-map.mjs"></script>
+</body>
+</html>
