@@ -1,12 +1,26 @@
-const crew = ['Marek Nowak', 'Anna Kowalska', 'Piotr Zieliński'];
 const crewProfiles = [
-  {name: crew[0], role: 'Marynarz pokładowy', initials: 'MN', color: 'teal',
+  {name: 'Marek Nowak', role: 'Marynarz pokładowy', initials: 'MN', color: 'teal',
     bio: 'Chętnie zagram mecz FIFA albo zorganizuję wieczór z planszówkami.', interests: ['FIFA', 'Planszówki']},
-  {name: crew[1], role: 'Oficer wachtowy', initials: 'AK', color: 'plum',
+  {name: 'Anna Kowalska', role: 'Oficer wachtowy', initials: 'AK', color: 'plum',
     bio: 'Szukam towarzystwa do wspólnych treningów i rozmów przy kawie.', interests: ['Trening', 'Kawa']},
-  {name: crew[2], role: 'Mechanik', initials: 'PZ', color: 'blue',
-    bio: 'Po wachcie najchętniej oglądam filmy albo gram w szachy.', interests: ['Filmy', 'Szachy']}
+  {name: 'Piotr Zieliński', role: 'Mechanik', initials: 'PZ', color: 'blue',
+    bio: 'Po wachcie najchętniej oglądam filmy albo gram w szachy.', interests: ['Filmy', 'Szachy']},
+  {name: 'Julia Wójcik', role: 'Oficer nawigacyjny', initials: 'JW', color: 'blue',
+    bio: 'Lubię fotografować wschody słońca i dzielić się zdjęciami z rejsu.', interests: ['Fotografia', 'Podróże']},
+  {name: 'Tomasz Lewandowski', role: 'Bosman', initials: 'TL', color: 'teal',
+    bio: 'Po pracy chętnie rozgrywam kilka partii w ping-ponga.', interests: ['Tenis stołowy', 'Quizy']},
+  {name: 'Natalia Mazur', role: 'Elektryk okrętowy', initials: 'NM', color: 'plum',
+    bio: 'Mam słabość do kryminałów i chętnie wymienię się książkami.', interests: ['Książki', 'Podcasty']},
+  {name: 'Oskar Kamiński', role: 'Kucharz okrętowy', initials: 'OK', color: 'teal',
+    bio: 'Chętnie wymienię się przepisami albo pogram na gitarze po kolacji.', interests: ['Gotowanie', 'Gitara']},
+  {name: 'Karolina Lis', role: 'Marynarz pokładowy', initials: 'KL', color: 'blue',
+    bio: 'Szukam ekipy do porannej rozgrzewki i wspólnego oglądania meczów.', interests: ['Fitness', 'Piłka nożna']},
+  {name: 'Michał Dąbrowski', role: 'Mechanik wachtowy', initials: 'MD', color: 'plum',
+    bio: 'Najchętniej spędzam wolny wieczór przy grze kooperacyjnej.', interests: ['Gry kooperacyjne', 'Łamigłówki']},
+  {name: 'Zofia Król', role: 'Kadetka pokładowa', initials: 'ZK', color: 'teal',
+    bio: 'Uczę się hiszpańskiego i chętnie poćwiczę konwersację przy herbacie.', interests: ['Hiszpański', 'Herbata']}
 ];
+const crew = crewProfiles.map(profile => profile.name);
 const storageKey = 'crewconnect-v1';
 const dateValue = (offset = 0) => {
   const date = new Date();
@@ -394,5 +408,6 @@ window.addEventListener('beforeinstallprompt', event => {
   };
 });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(console.error);
+member.innerHTML = crew.map(name => `<option>${escape(name)}</option>`).join('');
 updateNetwork();
 render();
