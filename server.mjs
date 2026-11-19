@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import events from './api/events.mjs';
 import workspace from './api/workspace.mjs';
 
 const { PORT = '3000' } = process.env;
@@ -19,6 +20,7 @@ const assets = new Map([
 createServer(async (req, res) => {
   const path = req.url.split('?')[0];
   try {
+    if (path === '/api/events') return await events(req, res);
     if (path === '/api/workspace') return await workspace(req, res);
     const asset = assets.get(path);
     if (req.method !== 'GET' || !asset) return res.writeHead(404).end();
