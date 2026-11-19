@@ -1,13 +1,14 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import qrFactory from 'qrcode-generator';
 import { createSocialStore } from '../social-store.mjs';
+import { sharedPlaces } from './places.mjs';
 
 const env = process.env;
 const hosted = env.NODE_ENV === 'production' || Boolean(env.VERCEL);
 const mongoUri = env.SOCIAL_MONGODB_URI || env.MONGODB_URI;
 const dbName = env.SOCIAL_MONGODB_DATABASE || (env.MONGODB_DATABASE || 'crewconnect') + '_social_demo';
 const adminEmail = (env.DEMO_ADMIN_EMAIL || 'admin@example.test').trim().toLowerCase();
-const adminCode = env.DEMO_ADMIN_CODE || (hosted ? '' : 'crew-admin-demo');
+const adminCode = env.DEMO_ADMIN_CODE || (hosted ? '' : '12345');
 const secret = env.DEMO_SESSION_SECRET || randomBytes(32);
 const guestCode = '123456';
 const cookieName = 'crew_social_session';
@@ -73,7 +74,8 @@ const cabinOf = (state, member) => state.cabins.find(item => item.id === member?
 const peopleIn = (state, cabin) => state.accounts.filter(person =>
   person.memberships?.some(item => item.cabinId === cabin.id)).length;
 const staff = user => user.role !== 'guest';
-const manages = (user, event) => user.role === 'admin' || (user.role === 'planner' && event.ownerId === user.id);
+const manages = (user, event) => user.role === 'admin' || event.ownerId === user.id;
+const hasStarted = event => Date.parse(event.startsAt) <= Date.now();
 
 function chatPartner(state, user, voyage, id) {
   const person = state.accounts.find(item => item.id === id);
@@ -152,7 +154,7 @@ function board(state, user) {
     profiles,
     events: events.map(({attendees, ...event}) => {
       const canManage = manages(user, event);
-      return {...event, canManage, count: attendees.length, joined: attendees.includes(user.id),
+      return {...event, source: event.source ?? 'program', canManage, count: attendees.length, joined: attendees.includes(user.id),
         ...(canManage && {attendees: attendees.map(id => id === admin.id ? admin.name :
           state.accounts.find(person => person.id === id)?.name || 'Uczestnik')})};
     }),
@@ -280,40 +282,53 @@ function adminAction(state, body, voyage, origin) {
   }
 }
 
-function saveEvent(state, body, user, voyage) {
-  if (!staff(user)) fail(403, 'Publikowanie jest dostępne dla plannera i admina.');
+function saveEvent(state, body, user, voyage, placeFromMap) {
+  const guestEvent = body.action === 'saveGuestEvent';
+  if (guestEvent && !body.id && user.role !== 'guest') fail(403, 'Spotkania mogą tworzyć goście rejsu.');
+  if (!guestEvent && !staff(user)) fail(403, 'Programem rejsu zarządzają plannerzy i administrator.');
   const event = body.id ? listed(state.events, body.id, 'Nie znaleziono wydarzenia.') : null;
   if (event && !manages(user, event)) fail(403, 'Możesz zarządzać własnymi wydarzeniami.');
+  if (event && (event.source === 'guest') !== guestEvent) fail(400, 'Otwórz formularz właściwy dla tego wydarzenia.');
   if (event && (event.voyageId !== voyage.id || event.status === 'cancelled')) fail(409, 'Wydarzenie jest zamknięte.');
   if (event && body.revision !== event.revision) fail(409, 'Wydarzenie zostało zmienione. Otwórz aktualną wersję.');
-  if (event?.status === 'published' && body.publish !== true) fail(409, 'To wydarzenie jest już opublikowane.');
+  if (guestEvent && event && hasStarted(event)) fail(409, 'To spotkanie już się rozpoczęło.');
+  if (guestEvent && !event && state.events.some(item => item.voyageId === voyage.id && item.ownerId === user.id &&
+      item.source === 'guest' && item.status === 'published' && !hasStarted(item))) {
+    fail(409, 'Masz już nadchodzące spotkanie w tym rejsie.');
+  }
+  const status = guestEvent || body.publish === true ? 'published' : 'draft';
+  if (event?.status === 'published' && status === 'draft') fail(409, 'To wydarzenie jest już opublikowane.');
   if (!categories.includes(body.category)) fail(400, 'Wybierz kategorię.');
   const startsAt = parseTime(body.localTime, voyage.timeZone);
   if (Date.parse(startsAt) <= Date.now()) fail(400, 'Wybierz termin w przyszłości.');
-  const capacity = body.capacity === null ? null : number(body.capacity, 1, 500, 'Limit miejsc');
+  const capacity = guestEvent || body.capacity === null ? null : number(body.capacity, 1, 500, 'Limit miejsc');
   if (capacity !== null && event && capacity < event.attendees.length) fail(409, 'Limit jest mniejszy od liczby zapisów.');
   const title = text(body.title, 90, 'Nazwa wydarzenia');
-  const place = text(body.place, 100, 'Miejsce');
+  const place = guestEvent ? placeFromMap.name : text(body.place, 100, 'Miejsce');
   const description = text(body.description, 500, 'Opis', false);
-  const status = body.publish === true ? 'published' : 'draft';
   const changes = event?.status === 'published' ? [
     ...(event.startsAt !== startsAt ? ['termin'] : []),
-    ...(event.place !== place ? ['miejsce'] : [])
+    ...(event.place !== place || event.placeId !== placeFromMap?.id || event.deck !== placeFromMap?.deck ? ['miejsce'] : [])
   ] : [];
   const updated = {title, place, description, category: body.category, startsAt, localTime: body.localTime,
+    ...(guestEvent && {placeId: placeFromMap.id, deck: placeFromMap.deck}),
     capacity, status, revision: (event?.revision ?? 0) + 1, changes: changes.length ? changes : event?.changes || []};
+  const id = event?.id ?? randomUUID();
   if (event) Object.assign(event, updated);
-  else state.events.push({...updated, id: randomUUID(), ownerId: user.id, owner: user.name, voyageId: voyage.id, attendees: []});
-  return {};
+  else state.events.push({...updated, id, ownerId: user.id, owner: user.name, voyageId: voyage.id,
+    source: guestEvent ? 'guest' : 'program', attendees: guestEvent ? [user.id] : []});
+  return {eventId: id};
 }
 
-function memberAction(state, body, user, voyage) {
+function memberAction(state, body, user, voyage, placeFromMap) {
   switch (body.action) {
     case 'saveEvent': return saveEvent(state, body, user, voyage);
+    case 'saveGuestEvent': return saveEvent(state, body, user, voyage, placeFromMap);
     case 'cancelEvent': {
       const event = listed(state.events, body.id, 'Nie znaleziono wydarzenia.');
       if (!manages(user, event)) fail(403, 'Możesz zarządzać własnymi wydarzeniami.');
       if (event.voyageId !== voyage.id || event.status === 'draft') fail(409, 'Wydarzenie jest zamknięte.');
+      if (event.source === 'guest' && hasStarted(event)) fail(409, 'To spotkanie już się rozpoczęło.');
       if (event.status !== 'cancelled') {
         event.status = 'cancelled';
         event.revision++;
@@ -324,7 +339,7 @@ function memberAction(state, body, user, voyage) {
     case 'leave': {
       const event = listed(state.events, body.id, 'Nie znaleziono wydarzenia.');
       if (event.voyageId !== voyage.id || event.status !== 'published') fail(404, 'Wydarzenie jest niedostępne.');
-      if (Date.parse(event.startsAt) <= Date.now()) fail(409, 'Wydarzenie już się rozpoczęło.');
+      if (hasStarted(event)) fail(409, 'Wydarzenie już się rozpoczęło.');
       if (body.action === 'leave') event.attendees = event.attendees.filter(id => id !== user.id);
       else if (!event.attendees.includes(user.id)) {
         if (event.capacity !== null && event.attendees.length >= event.capacity) fail(409, 'Wszystkie miejsca są już zajęte.');
@@ -425,6 +440,17 @@ export default async function social(req, res) {
       setSession(res, account);
       return send(200, board(state, account));
     }
+    let placeFromMap;
+    if (body?.action === 'saveGuestEvent') {
+      const state = await store.read();
+      const user = session(req, state);
+      if (!user) fail(401, 'Zaloguj się ponownie.');
+      const voyage = activeVoyage(state);
+      if (!voyage || (!staff(user) && !membership(user, voyage))) fail(403, 'Dołącz do aktywnego rejsu.');
+      const placeId = text(body.placeId, 64, 'Miejsce na mapie');
+      placeFromMap = (await sharedPlaces()).find(place => place.id === placeId);
+      if (!placeFromMap) fail(400, 'Wybierz dostępne miejsce z mapy statku.');
+    }
     const result = await store.change(state => {
       const user = session(req, state);
       if (!user) fail(401, 'Zaloguj się ponownie.');
@@ -434,7 +460,7 @@ export default async function social(req, res) {
         return adminAction(state, body, voyage, origin.origin);
       }
       if (!voyage || (!staff(user) && !membership(user, voyage))) fail(403, 'Dołącz do aktywnego rejsu.');
-      return memberAction(state, body || {}, user, voyage);
+      return memberAction(state, body || {}, user, voyage, placeFromMap);
     });
     const state = await store.read();
     return send(200, {...board(state, session(req, state)), ...result});
