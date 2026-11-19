@@ -34,8 +34,8 @@ function renderShipStatistics() {
     bookings:sum.bookings+place.bookings,seats:sum.seats+place.seats,pastSeats:sum.pastSeats+place.pastSeats,
     reviews:sum.reviews+place.reviews
   }),{bookings:0,seats:0,pastSeats:0,reviews:0});
-  return heading + error + `<section class="statistics-section"><h2>Załoga i aktywności</h2>
-    <div class="statistics-grid">${metric('Aktywne profile załogi',data.members)}${metric('Opublikowane profile',data.publicProfiles)}
+  return heading + error + `<section class="statistics-section"><h2>Osoby i aktywności</h2>
+    <div class="statistics-grid">${metric('Aktywne profile w portalu',data.members)}${metric('Opublikowane profile',data.publicProfiles)}
       ${metric('Dopasowania',data.matches)}${metric('Wydarzenia na tablicy',data.events)}
       ${metric('Wydarzenia z uzgodnionym terminem',data.scheduled)}${metric('Zapisy na wydarzenia',data.signups)}</div>
     <p class="muted">Liczba aktywnych profili pochodzi z portalu. Nie mierzy fizycznej obecności na statku.</p>

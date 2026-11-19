@@ -6,7 +6,7 @@ const {MONGODB_URI, MONGODB_DATABASE = 'crewconnect'} = process.env;
 const times = ['12:00', '13:30', '15:00', '17:00', '18:30', '20:00', '21:30'];
 export const restaurantExamples = [
   {id: 'mesa-horizon', name: 'Mesa Horizon', cuisine: 'Kuchnia europejska', deck: 'Pokład 5',
-    description: 'Bistro na wspólny lunch i kolację po wachcie.', tables: [2, 2, 4, 4, 6], theme: 'ocean',
+    description: 'Bistro na wspólny lunch i kolację.', tables: [2, 2, 4, 4, 6], theme: 'ocean',
     menu: [{name:'Krem z pieczonych pomidorów', price:1900}, {name:'Dorsz z warzywami', price:4900}, {name:'Sernik cytrynowy', price:1900}]},
   {id: 'porto', name: 'Porto', cuisine: 'Kuchnia włoska', deck: 'Pokład 7',
     description: 'Pizza z pieca i makarony inspirowane śródziemnomorskimi portami.', tables: [2, 4, 4, 6], theme: 'ember',
