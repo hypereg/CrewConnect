@@ -1,5 +1,5 @@
-const cacheName = 'crewconnect-shell-v15';
-const assets = ['./', 'index.html', 'style.css?v=15', 'crew-profiles.js?v=15', 'app.js?v=15', 'duties.js?v=15', 'voice.js?v=15', 'manifest.webmanifest', 'icon.png', 'icon-large.png'];
+const cacheName = 'crewconnect-shell-v16';
+const assets = ['./', 'index.html', 'style.css?v=16', 'crew-profiles.js?v=16', 'app.js?v=16', 'duties.js?v=16', 'voice.js?v=16', 'manifest.webmanifest', 'icon.png', 'icon-large.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(assets)).then(() => self.skipWaiting()));
 });

@@ -164,3 +164,21 @@
 
 .crew-interests .common-interest{background:#dbf5ed;color:#15584c;font-weight:700}
 .crew-details .profile-intent{font-size:14px;color:#324e66}
+
+.crew-match button{margin-left:auto;flex:none}
+.crew-chat-dialog{width:min(520px,calc(100% - 24px))}
+.match-celebration{text-align:center;padding:20px 0}
+.match-hearts{position:relative;display:grid;place-items:center;height:132px;color:#bc3e64}
+.match-hearts span{position:absolute;font-size:62px;animation:match-heart 1.4s ease-out both}
+.match-hearts span:nth-child(2){--heart-x:-90px;--heart-y:-30px;font-size:35px;animation-delay:90ms}
+.match-hearts span:nth-child(3){--heart-x:91px;--heart-y:-22px;font-size:42px;animation-delay:150ms}
+.match-hearts span:nth-child(4){--heart-x:-43px;--heart-y:42px;font-size:25px;animation-delay:220ms}
+.match-hearts span:nth-child(5){--heart-x:52px;--heart-y:34px;font-size:29px;animation-delay:180ms}
+@keyframes match-heart{from{opacity:0;transform:scale(.35)}35%{opacity:1}to{opacity:1;transform:translate(var(--heart-x,0),var(--heart-y,0)) scale(1)}}
+@media(prefers-reduced-motion:reduce){.match-hearts span{animation:none}}
+.chat-messages{display:flex;flex-direction:column;gap:10px;min-height:130px;max-height:min(43vh,380px);overflow:auto;margin-top:16px;padding:10px;background:#f2f6f9;border-radius:12px}
+.chat-message{align-self:flex-start;max-width:85%;padding:8px 12px;border-radius:12px;background:#fff}
+.chat-message.own{align-self:flex-end;background:#dbf5ed}
+.chat-message p{margin:3px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.chat-meta{font-size:12px;color:#465c6d}
+.chat-compose button{justify-self:end}
