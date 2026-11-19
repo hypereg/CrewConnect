@@ -159,3 +159,5 @@
   .profile-card { grid-template-columns: 1fr; }
   .profile-card .crew-portrait { min-height: 130px; }
 }
+.calendar-event.proposed{background:#e3edf5;color:#324e66}
+@media(max-width:540px){.calendar-event.proposed{background:#7894ad;color:transparent}}

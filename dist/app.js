@@ -181,9 +181,10 @@ function renderCalendar() {
   const first = new Date(visibleMonth + '-01T12:00');
   const start = new Date(first);
   start.setDate(1 - (first.getDay() + 6) % 7);
-  const scheduled = allEvents().flatMap(event => {
-    const [slot] = sharedSlots(event);
-    return slot ? [{event, slot}] : [];
+  const scheduled = sharedEvents.flatMap(event => {
+    const [agreedSlot] = sharedSlots(event);
+    const slots = agreedSlot ? [agreedSlot] : event.slots;
+    return slots.map(slot => ({event, slot, agreed: Boolean(agreedSlot)}));
   }).sort((a, b) => a.slot.localeCompare(b.slot));
   const eventsOn = day => scheduled.filter(item => item.slot.slice(0, 10) === day);
   const today = dateValue();
@@ -195,17 +196,17 @@ function renderCalendar() {
     return `<button class="calendar-day ${day.startsWith(visibleMonth) ? '' : 'outside'}" data-action="calendar-day" data-day="${day}"
       aria-label="${dayLabel.format(date)}, wydarzenia: ${items.length}" aria-pressed="${day === selectedDay}" ${day === today ? 'aria-current="date"' : ''}>
       <span class="day-number">${date.getDate()}</span>
-      ${items.slice(0, 2).map(({event, slot}) => `<span class="calendar-event">${slot.slice(11, 16)} ${escape(event.title)}</span>`).join('')}
+      ${items.slice(0, 2).map(({event, slot, agreed}) => `<span class="calendar-event${agreed ? '' : ' proposed'}">${slot.slice(11, 16)} ${escape(event.title)}</span>`).join('')}
       ${items.length > 2 ? `<span class="calendar-more">+${items.length - 2}</span>` : ''}
     </button>`;
   }).join('');
-  const agenda = eventsOn(selectedDay).map(({event, slot}) => `
+  const agenda = eventsOn(selectedDay).map(({event, slot, agreed}) => `
     <article class="agenda-item"><time datetime="${slot}">${slot.slice(11, 16)}</time>
-      <div><h3>${escape(event.title)}</h3><p class="muted">${escape(event.type)} · ${escape(displayName(event.owner, event.memberNames))}</p></div>
+      <div><h3>${escape(event.title)}</h3><p class="muted">${agreed ? 'Uzgodniony termin' : 'Proponowany termin'} · ${escape(displayName(event.owner, event.memberNames))}</p></div>
       ${signupButton(event, 'secondary')}
     </article>`).join('');
   return `<section class="calendar" aria-labelledby="calendar-title">
-    <header class="calendar-header"><div><h1 id="calendar-title">Kalendarz</h1><h2>${monthLabel.format(first)}</h2></div>
+    <header class="calendar-header"><div><h1 id="calendar-title">Wspólny kalendarz załogi</h1><h2>${monthLabel.format(first)}</h2></div>
       <div class="calendar-controls">
         <button class="secondary" data-action="calendar-today">Dzisiaj</button>
         <button class="secondary" data-action="calendar-prev" aria-label="Poprzedni miesiąc">‹</button>
@@ -216,7 +217,7 @@ function renderCalendar() {
   </section>
   <section class="card agenda"><header><h2>${dayLabel.format(new Date(selectedDay + 'T12:00'))}</h2>
     <button class="primary" data-action="event" data-day="${selectedDay}">+ Nowa aktywność</button></header>
-    ${agenda || '<p class="muted">Tego dnia nie ma uzgodnionych aktywności.</p>'}
+    ${agenda || `<p class="muted">${eventsAvailable ? 'Tego dnia nie ma wspólnych aktywności.' : 'Oczekiwanie na wspólną tablicę wydarzeń.'}</p>`}
   </section>`;
 }
 const stat = (count, label) => `<div class="stat"><b>${count}</b><span>${label}</span></div>`;
