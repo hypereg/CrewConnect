@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "outputDirectory": "dist",
+  "functions": {
+    "api/duties.mjs": { "includeFiles": "riva-asr.proto" },
+    "api/duties/completion.mjs": { "includeFiles": "riva-asr.proto" },
+    "api/reports.mjs": { "includeFiles": "riva-asr.proto" },
+    "api/reports/draft.mjs": { "includeFiles": "riva-asr.proto" }
+  }
+}

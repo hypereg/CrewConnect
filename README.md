@@ -28,3 +28,11 @@ Kolekcje `crewDuties` i `crewDutyReports` MongoDB przechowują wspólny harmonog
 Raport głosowy działa również w prototypie bez bazy. Wystarczy uruchomić backend z `CREW_PASSWORD` i `NVIDIA_API_KEY`, otworzyć raport i wpisać wspólne hasło załogi przy pierwszym użyciu mikrofonu w danej karcie. W trybie wspólnego harmonogramu wystarczy wcześniejsze zalogowanie.
 
 Raport głosowy wymaga HTTPS lub `localhost` i dostępu do mikrofonu. Wybierz „Nagraj raport”, powiedz, co się wydarzyło, i kliknij „Zakończ i wyślij do AI”. [NVIDIA Parakeet RNNT Multilingual](https://build.nvidia.com/nvidia/parakeet-1_1b-rnnt-multilingual-asr/api) przepisuje do 30 sekund dźwięku, a [Qwen3-Next przez NVIDIA NIM](https://docs.api.nvidia.com/nim/reference/qwen-qwen3-next-80b-a3b-instruct-infer) redaguje polski szkic. Gotowa treść trafia do edytowalnego pola raportu. Jeżeli użytkownik już coś wpisał, może sam zdecydować, czy zastąpić to szkicem. CrewConnect zapisuje wyłącznie zatwierdzony tekst. Backend potrzebuje dostępu do `grpc.nvcf.nvidia.com:443` i `integrate.api.nvidia.com:443`.
+
+## Vercel i Atlas
+
+Zaimportuj repozytorium `hypereg/CrewConnect` jako projekt Vercel. Zostaw główny katalog repozytorium jako Root Directory. Plik `vercel.json` wskazuje katalog PWA, a Vercel uruchamia funkcje Node.js z katalogu `api/`.
+
+W ustawieniach projektu dodaj `MONGODB_URI` jako sekret produkcyjny. Opcjonalnie ustaw `MONGODB_DATABASE`, jeśli baza ma inną nazwę niż `crewconnect`. Adresy wyjściowe funkcji muszą mieć dostęp do klastra Atlas. Po wdrożeniu PWA i API działają na tej samej domenie, więc `FRONTEND_ORIGIN` jest potrzebne tylko wtedy, gdy z API ma korzystać też osobny frontend GitHub Pages.
+
+Aby włączyć raporty głosowe na Vercel, ustaw tam również `CREW_PASSWORD` i `NVIDIA_API_KEY`.

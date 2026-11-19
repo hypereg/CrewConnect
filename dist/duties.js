@@ -1,7 +1,7 @@
 const dutiesBase = document.querySelector('meta[name="crewconnect-api"]')?.content;
 const dutySessionKey = 'crewconnect-duty-session:' + (dutiesBase || location.origin);
 let hostedDuties = Boolean(dutiesBase || document.querySelector('meta[name="crewconnect-shared"]'));
-const dutyServerConfigured = hostedDuties;
+let dutyServerConfigured = hostedDuties;
 let demoVoiceEnabled = false;
 let dutySession;
 try {
@@ -52,23 +52,29 @@ async function dutyRequest(path, data, signal, session = dutySession) {
     options.method = 'POST';
     options.body = wav ? data : JSON.stringify(data);
   }
-  const url = dutiesBase ? new URL(path, dutiesBase).href : path;
+  const url = dutiesBase ? new URL(path, dutiesBase) : new URL(path.slice(1), location.href);
   const response = await fetch(url, options).catch(() => {
     throw new Error('Sprawdź połączenie z internetem i spróbuj ponownie.');
   });
   const result = await response.json().catch(() => null);
   if (!response.ok || !result) {
-    throw Object.assign(new Error(result?.error || 'Operacja jest chwilowo niedostępna.'), {status: response.status});
+    throw Object.assign(new Error(result?.error || 'Operacja jest chwilowo niedostępna.'), {
+      status: response.status, apiError: typeof result?.error === 'string'
+    });
   }
   return result;
 }
 
 async function loadDuties(refreshNotice) {
-  if (!dutyServerConfigured) return;
+  if (!dutyServerConfigured && !['https:', 'http:'].includes(location.protocol)) return;
   const request = ++scheduleRequest;
   try {
     const next = await dutyRequest('/api/duties');
     if (request !== scheduleRequest) return;
+    if (next.demo !== true && (!next.user || !Array.isArray(next.duties))) {
+      throw new Error('Serwer zwrócił nieprawidłowy harmonogram.');
+    }
+    dutyServerConfigured = true;
     hostedDuties = !next.demo;
     if (next.demo) {
       demoVoiceEnabled = Boolean(next.voiceEnabled);
@@ -77,9 +83,11 @@ async function loadDuties(refreshNotice) {
       if (dutySession && dutySession.member !== next.user.id) storeDutySession(dutySession.password, next.user.id);
     }
     scheduleError = null;
-    if (refreshNotice) showNotice('Harmonogram odświeżony.');
+    if (refreshNotice) announce('Harmonogram odświeżony.');
   } catch (error) {
     if (request !== scheduleRequest) return;
+    if (!dutyServerConfigured && !error.apiError) return;
+    dutyServerConfigured = true;
     scheduleError = error;
     if (error.status === 401) {
       hostedDuties = true;
@@ -338,7 +346,7 @@ function editDuty(data, duty) {
     if (hostedDuties) {
       await dutyRequest('/api/duties', payload);
       await loadDuties();
-      showNotice('Zapisano przydział.');
+      announce('Zapisano przydział.');
     } else {
       const list = demoSchedule().duties;
       const current = list.find(item => item.id === id);
@@ -383,7 +391,7 @@ function editDutyReport(data, report, duty, local = false) {
     if (hostedDuties && !local) {
       await dutyRequest('/api/reports', payload);
       await loadDuties();
-      showNotice('Zapisano raport.');
+      announce('Zapisano raport.');
     } else {
       const current = state.reports.find(item => item.id === id);
       const currentDuty = duty && demoSchedule().duties.find(item => item.id === duty.id);
@@ -437,9 +445,9 @@ async function handleDutyAction(button) {
     try {
       await dutyRequest('/api/duties/completion', {id, completed});
       await loadDuties();
-      showNotice(message);
+      announce(message);
     } catch (error) {
-      showNotice(error.message);
+      announce(error.message);
     } finally {
       completionPending = false;
       render();

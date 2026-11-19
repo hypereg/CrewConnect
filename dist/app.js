@@ -18,13 +18,47 @@ const crewProfiles = [
   {name: 'Michał Dąbrowski', gender: 'men', role: 'Mechanik wachtowy', initials: 'MD', color: 'plum',
     bio: 'Najchętniej spędzam wolny wieczór przy grze kooperacyjnej.', interests: ['Gry kooperacyjne', 'Łamigłówki']},
   {name: 'Zofia Król', gender: 'women', role: 'Kadetka pokładowa', initials: 'ZK', color: 'teal',
-    bio: 'Uczę się hiszpańskiego i chętnie poćwiczę konwersację przy herbacie.', interests: ['Hiszpański', 'Herbata']}
+    bio: 'Uczę się hiszpańskiego i chętnie poćwiczę konwersację przy herbacie.', interests: ['Hiszpański', 'Herbata']},
+  ...addedCrewProfiles
 ];
 const crew = crewProfiles.map(profile => profile.name);
 const genderFilters = {all: 'Wszystkich', women: 'Kobiety', men: 'Mężczyzn'};
 const preferredGender = () => state.crewPreferences?.[state.member] ?? 'all';
 const matchesPreference = profile => preferredGender() === 'all' || profile.gender === preferredGender();
 const storageKey = 'crewconnect-v1';
+let sharedEvents = [];
+let eventsAvailable = false;
+const isShared = event => sharedEvents.some(shared => shared.id === event.id);
+const allEvents = () => [...sharedEvents, ...state.events.filter(event => !isShared(event))];
+
+async function refreshEvents() {
+  try {
+    const response = await fetch('api/events', {cache: 'no-store'});
+    if (!response.ok) return;
+    const events = await response.json();
+    if (!Array.isArray(events)) return;
+    const changed = !eventsAvailable || JSON.stringify(sharedEvents) !== JSON.stringify(events);
+    eventsAvailable = true;
+    sharedEvents = events;
+    if (changed) render();
+  } catch {
+    // Preserve the last loaded board while offline.
+  }
+}
+
+async function updateSharedEvent(payload, success) {
+  try {
+    const response = await fetch('api/events', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+    });
+    const result = await response.json();
+    await refreshEvents();
+    announce(response.ok ? success : result.error);
+  } catch {
+    announce('Nie udało się zapisać na tablicy załogi. Spróbuj ponownie po odzyskaniu połączenia.');
+  }
+}
+const publishEvent = event => updateSharedEvent({...event, capacity: event.capacity ?? 30, action: 'publish'}, 'Wydarzenie jest widoczne na tablicy załogi.');
 const pendingKey = 'crewconnect-workspace-pending';
 const apiBase = document.querySelector('meta[name="crewconnect-api"]')?.content;
 const workspaceUrl = apiBase ? new URL('/api/workspace', apiBase).href : 'api/workspace';
@@ -121,7 +155,7 @@ function renderCalendar() {
   const first = new Date(visibleMonth + '-01T12:00');
   const start = new Date(first);
   start.setDate(1 - (first.getDay() + 6) % 7);
-  const scheduled = state.events.flatMap(event => {
+  const scheduled = allEvents().flatMap(event => {
     const [slot] = sharedSlots(event);
     return slot ? [{event, slot}] : [];
   }).sort((a, b) => a.slot.localeCompare(b.slot));
@@ -177,6 +211,7 @@ function eventCard(event) {
     <p class="note"><strong>${summary}</strong></p>
     <p class="muted">${people.length}${event.capacity ? ' / ' + event.capacity : ''} zapisanych${people.length ? ' · ' + escape(people.join(', ')) : ''}</p>
     <footer>${signupButton(event, 'primary')}
+    ${isShared(event) ? '<span class="badge">Tablica załogi</span>' : eventsAvailable && event.id !== 'fifa' && event.owner === state.member ? `<button class="secondary" data-action="publish" data-id="${event.id}">Opublikuj dla załogi</button>` : ''}
     ${event.votes[state.member] && event.owner !== state.member ? `<button class="secondary" data-action="leave" data-id="${event.id}">Wypisz się</button>` : ''}</footer>
   </article>`;
 }
@@ -252,8 +287,8 @@ function render() {
     content.innerHTML = renderDuties(page);
   } else {
     content.innerHTML = title('Życie na pokładzie', 'Aktywności załogi', 'Zaproponuj wydarzenie i znajdź termin, który pasuje wszystkim zapisanym.', 'event', 'Nowa aktywność') +
-      `<div class="stats">${stat(state.events.length, 'Aktywności')}${stat(state.events.filter(event => event.votes[state.member]).length, 'Moje zapisy')}${stat(state.events.filter(event => sharedSlots(event).length).length, 'Uzgodnione terminy')}</div>
-      <section class="section"><h2>Wydarzenia na pokładzie</h2><div class="grid">${state.events.map(eventCard).join('') || '<p class="empty">Brak aktywności.</p>'}</div></section>`;
+      `<div class="stats">${stat(allEvents().length, 'Aktywności')}${stat(allEvents().filter(event => event.votes[state.member]).length, 'Moje zapisy')}${stat(allEvents().filter(event => sharedSlots(event).length).length, 'Uzgodnione terminy')}</div>
+      <section class="section"><h2>Wydarzenia na pokładzie</h2><div class="grid">${allEvents().map(eventCard).join('') || '<p class="empty">Brak aktywności.</p>'}</div></section>`;
   }
 }
 
@@ -263,10 +298,10 @@ function save(message) {
   localStorage.setItem(pendingKey, snapshot);
   void syncWorkspace();
   render();
-  if (message) showNotice(message);
+  if (message) announce(message);
 }
 
-function showNotice(message) {
+function announce(message) {
   clearTimeout(noticeTimer);
   notice.textContent = message;
   noticeTimer = setTimeout(() => { notice.textContent = ''; }, 3500);
@@ -311,6 +346,7 @@ function createEvent(day) {
     <label>Pierwszy termin <input type="datetime-local" name="slot" value="${preferredTime}" required></label>
     <label>Drugi termin <input type="datetime-local" name="slot" required></label>
     <label>Trzeci termin (opcjonalnie) <input type="datetime-local" name="slot"></label>
+    ${eventsAvailable ? '<p class="muted">Wydarzenie pojawi się na wspólnej tablicy dostępnej dla osób korzystających z tej aplikacji.</p>' : ''}
     <p class="muted">Jako organizator deklarujesz dostępność w proponowanych terminach. Możesz ją później zmienić.</p>`, 'Utwórz aktywność', (data, form) => {
     const selected = data.getAll('slot').filter(Boolean);
     const slots = [...new Set(selected)].sort();
@@ -322,10 +358,12 @@ function createEvent(day) {
       form.addEventListener('input', () => input.setCustomValidity(''), {once: true});
       return false;
     }
-    state.events.unshift({id: crypto.randomUUID(), title: name, owner: state.member,
+    const event = {id: crypto.randomUUID(), title: name, owner: state.member,
       type: data.get('type'), capacity: Number(data.get('capacity')), description: data.get('description').trim(), slots,
-      votes: {[state.member]: slots.map((_, index) => index)}});
-    save('Dodano aktywność.');
+      votes: {[state.member]: slots.map((_, index) => index)}};
+    state.events.unshift(event);
+    save(eventsAvailable ? 'Zapisywanie wydarzenia na tablicy załogi…' : 'Zapisano wydarzenie w tej przeglądarce.');
+    if (eventsAvailable) void publishEvent(event);
   });
   const slider = dialog.querySelector('#event-capacity');
   const value = dialog.querySelector('#capacity-value');
@@ -342,10 +380,14 @@ function vote(event) {
       form.querySelector('[data-error]').textContent = 'Wybierz co najmniej jeden termin.';
       return false;
     }
-    const currentEvent = state.events.find(item => item.id === event.id);
+    const currentEvent = allEvents().find(item => item.id === event.id);
     if (!currentEvent?.votes[state.member] && (!currentEvent || isFull(currentEvent))) {
       form.querySelector('[data-error]').textContent = 'Na tę aktywność nie ma już wolnych miejsc.';
       return false;
+    }
+    if (isShared(currentEvent)) {
+      void updateSharedEvent({action: 'vote', id: event.id, member: state.member, vote: selected}, 'Zapisano dostępność.');
+      return;
     }
     currentEvent.votes[state.member] = selected;
     save('Zapisano dostępność.');
@@ -369,7 +411,7 @@ content.addEventListener('click', e => {
     content.querySelector('[data-action="crew-skip"]')?.focus();
     return;
   }
-  const event = state.events.find(item => item.id === id);
+  const event = allEvents().find(item => item.id === id);
   if (action === 'event') createEvent(button.dataset.day);
   if (action.startsWith('calendar-')) {
     if (action === 'calendar-day' || action === 'calendar-today') {
@@ -384,8 +426,14 @@ content.addEventListener('click', e => {
     const focusTarget = action === 'calendar-day' ? '[aria-pressed="true"]' : `[data-action="${action}"]`;
     content.querySelector(focusTarget)?.focus();
   }
+  if (action === 'publish' && event && event.owner === state.member &&
+      window.confirm('Opublikować wydarzenie na wspólnej tablicy tej aplikacji?')) void publishEvent(event);
   if (action === 'vote' && event) vote(event);
   if (action === 'leave' && event && event.owner !== state.member) {
+    if (isShared(event)) {
+      void updateSharedEvent({action: 'vote', id, member: state.member, vote: null}, 'Wypisano Cię z aktywności.');
+      return;
+    }
     delete event.votes[state.member];
     save('Wypisano Cię z aktywności.');
   }
@@ -489,3 +537,8 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
 member.innerHTML = crew.map(name => `<option>${escape(name)}</option>`).join('');
 refreshPage();
 void syncWorkspace();
+
+void refreshEvents();
+window.addEventListener('focus', refreshEvents);
+window.addEventListener('online', refreshEvents);
+setInterval(() => { if (!document.hidden) void refreshEvents(); }, 15000);
