@@ -249,3 +249,7 @@
 @media(prefers-reduced-motion:reduce){.swipe-card,.swipe-choice-icon{transition:none}}
 
 .swipe-example{position:absolute;bottom:12px;left:16px;padding:5px 9px;border-radius:6px;background:#101c2df0;color:white;font-size:13px;font-weight:650}
+
+.sidebar .profile a{display:flex;align-items:center;min-height:44px;padding:8px 10px;border:1px solid #38516a;border-radius:8px;background:#1b2c41;color:white;font-weight:650;text-decoration:none;overflow-wrap:anywhere}
+.sidebar .profile a:hover{background:#214453;color:#b2f5ea}
+.crewconnect-layout.on-duties .sidebar .profile{display:grid}

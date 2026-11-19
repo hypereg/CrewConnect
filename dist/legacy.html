@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.png">
 <link rel="apple-touch-icon" href="icon.png">
-<link rel="stylesheet" href="style.css?v=26">
+<link rel="stylesheet" href="style.css?v=27">
 <title>CrewConnect — Na pokładzie</title>
 </head>
 <body class="crewconnect-layout">
@@ -35,11 +35,11 @@
       <a href="#dziennik-raportow" data-page="dziennik-raportow">Dziennik raportów</a>
     </div>
   </nav>
-  <div class="profile"><label for="crew">Aktywny profil</label><select id="crew"></select></div>
+  <div class="profile"><span>Mój profil</span><a id="crew" href="#profil">Dodaj mój profil</a></div>
   </div>
 </aside>
 <main>
-  <header class="top"><span><span class="dot"></span> MV Horizon</span><span id="network">Tryb demo</span><button id="install" class="secondary" hidden>Zainstaluj PWA</button></header>
+  <header class="top"><span><span class="dot"></span> MV Horizon</span><span id="network">Brak aktywnego profilu</span><button id="install" class="secondary" hidden>Zainstaluj PWA</button></header>
   <div id="content"></div>
 </main>
 <footer class="site-footer">
@@ -59,7 +59,7 @@
 <dialog id="dialog"></dialog>
 <div id="notice" role="status" aria-live="polite"></div>
 <script src="voice.js?v=18" defer></script>
-<script src="duties.js?v=18" defer></script>
-<script src="app.js?v=26" defer></script>
+<script src="duties.js?v=27" defer></script>
+<script src="app.js?v=27" defer></script>
 </body>
 </html>

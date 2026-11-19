@@ -1,6 +1,7 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { MongoClient } from 'mongodb';
 import { validProfile } from './workspace.mjs';
+import { discoveryId, discoveryFields } from '../discovery-profile.mjs';
 
 const { MONGODB_URI, MONGODB_DATABASE = 'crewconnect' } = process.env;
 let connecting;
@@ -13,7 +14,6 @@ function getDatabase() {
 }
 
 const send = (res, status, data) => res.writeHead(status, {'Content-Type': 'application/json'}).end(JSON.stringify(data));
-const publicId = session => createHash('sha256').update('crewconnect-discovery:' + session).digest('hex');
 const validId = id => typeof id === 'string' && /^[a-f0-9]{64}$/.test(id);
 const pair = (first, second) => [first, second].sort().join(':');
 
@@ -33,7 +33,7 @@ export default async function connections(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   const session = req.headers.cookie?.match(/(?:^|; *)crew_workspace=([a-f0-9]{64})(?:;|$)/)?.[1];
   if (!session) return send(res, 401, {error: 'Odśwież stronę, aby wznowić sesję.'});
-  const me = publicId(session);
+  const me = discoveryId(session);
   try {
     const db = await getDatabase();
     const profiles = db.collection('discovery_profiles');
@@ -63,8 +63,7 @@ export default async function connections(req, res) {
       if (!validProfile(body.profile) || !['', 'women', 'men'].includes(body.profile.gender)) {
         return send(res, 400, {error: 'Uzupełnij dane profilu.'});
       }
-      const {name, role, bio, interests, intent, icebreaker, gender} = body.profile;
-      await profiles.updateOne({_id: me}, {$set: {name, role, bio, interests, intent: intent ?? '', icebreaker: icebreaker ?? '', gender}}, {upsert: true});
+      await profiles.updateOne({_id: me}, {$set: discoveryFields(body.profile)}, {upsert: true});
       return send(res, 200, {ok: true});
     }
     if (body?.action === 'hide') {

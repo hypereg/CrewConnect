@@ -1,15 +1,16 @@
 import { randomBytes } from 'node:crypto';
 import { MongoClient } from 'mongodb';
+import { discoveryId, discoveryFields } from '../discovery-profile.mjs';
 
 const { MONGODB_URI, MONGODB_DATABASE = 'crewconnect', FRONTEND_ORIGIN } = process.env;
 let client;
 
-function workspaceCollection() {
+function workspaceDatabase() {
   if (!MONGODB_URI) throw new Error('MONGODB_URI is required.');
   if (!client) {
     client = new MongoClient(MONGODB_URI, {maxPoolSize: 5, serverSelectionTimeoutMS: 5000});
   }
-  return client.db(MONGODB_DATABASE).collection('workspaces');
+  return client.db(MONGODB_DATABASE);
 }
 
 export function validProfile(profile) {
@@ -21,6 +22,8 @@ export function validProfile(profile) {
     typeof profile.bio === 'string' && profile.bio.length <= 300 &&
     (profile.intent === undefined || ['', 'dates', 'relationship', 'friendship', 'activities'].includes(profile.intent)) &&
     (profile.icebreaker === undefined || (typeof profile.icebreaker === 'string' && profile.icebreaker.length <= 120)) &&
+    (profile.age == null || (Number.isInteger(profile.age) && profile.age >= 18 && profile.age <= 120)) &&
+    (profile.gender === undefined || ['', 'women', 'men'].includes(profile.gender)) &&
     Array.isArray(profile.interests) && profile.interests.length <= 6 &&
     profile.interests.every(interest => typeof interest === 'string' && interest.trim() && interest.length <= 28);
 }
@@ -51,7 +54,7 @@ export default async function workspace(req, res) {
       }
     }
     if (req.method === 'GET') {
-      const workspace = await workspaceCollection().findOne({_id: id}, {projection: {snapshot: 1}});
+      const workspace = await workspaceDatabase().collection('workspaces').findOne({_id: id}, {projection: {snapshot: 1}});
       return res.writeHead(200, {'Content-Type': 'application/json'}).end(JSON.stringify(workspace?.snapshot ?? null));
     }
     if (req.headers['content-type']?.split(';')[0] !== 'application/json') return res.writeHead(415).end();
@@ -76,7 +79,14 @@ export default async function workspace(req, res) {
         (snapshot.userProfile !== undefined && !validProfile(snapshot.userProfile))) {
       return res.writeHead(400).end();
     }
-    await workspaceCollection().updateOne(
+    const db = workspaceDatabase();
+    const filter = {_id: id};
+    const previous = await db.collection('workspaces').findOne(filter, {projection: {'snapshot.userProfile': 1}});
+    const updated = snapshot.userProfile;
+    if (updated && JSON.stringify(previous?.snapshot?.userProfile) !== JSON.stringify(updated)) {
+      await db.collection('discovery_profiles').updateOne({_id: discoveryId(id)}, {$set: discoveryFields(updated)});
+    }
+    await db.collection('workspaces').updateOne(
       {_id: id},
       {$set: {snapshot, updatedAt: new Date()}},
       {upsert: true}

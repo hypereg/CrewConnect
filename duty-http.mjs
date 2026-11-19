@@ -16,7 +16,7 @@ export async function handleDutyRequest(path, req, res) {
   if (crossOrigin) {
     res.setHeader('Access-Control-Allow-Origin', FRONTEND_ORIGIN);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Workspace-Token');
   }
   if (req.method === 'OPTIONS') return res.writeHead(crossOrigin ? 204 : 403).end();
   try {
