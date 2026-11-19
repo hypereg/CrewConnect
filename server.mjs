@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import events from './api/events.mjs';
+import notifications from './api/notifications.mjs';
 import statistics from './api/statistics.mjs';
 import restaurants from './api/restaurants.mjs';
 import places from './api/places.mjs';
@@ -17,6 +18,7 @@ const assets = new Map([
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
   ['/legacy.html', ['legacy.html', 'text/html; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
+  ['/notifications.js', ['notifications.js', 'text/javascript; charset=utf-8']],
   ['/statistics.js', ['statistics.js', 'text/javascript; charset=utf-8']],
   ['/restaurants.js', ['restaurants.js', 'text/javascript; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
@@ -44,6 +46,7 @@ createServer(async (req, res) => {
     if (path === '/api/places') return await places(req, res);
     if (path === '/api/connections') return await connections(req, res);
     if (path === '/api/users') return await users(req, res);
+    if (path === '/api/notifications') return await notifications(req, res);
     if (path === '/api/statistics') return await statistics(req, res);
     if (path === '/api/restaurants') return await restaurants(req, res);
     if (path === '/api/workspace') return await workspace(req, res);

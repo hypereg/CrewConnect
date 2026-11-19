@@ -9,8 +9,8 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.png">
 <link rel="apple-touch-icon" href="icon.png">
-<link rel="stylesheet" href="style.css?v=35">
 <link rel="stylesheet" href="profile.css?v=1">
+<link rel="stylesheet" href="style.css?v=37">
 <title>CrewConnect — Na pokładzie</title>
 </head>
 <body class="crewconnect-layout">
@@ -35,7 +35,16 @@
   </div>
 </aside>
 <main>
-  <header class="top"><span><span class="dot"></span> MV Horizon</span><span id="network">Brak aktywnego profilu</span><button id="install" class="secondary" hidden>Zainstaluj PWA</button></header>
+  <header class="top"><span><span class="dot"></span> MV Horizon</span><span id="network">Brak aktywnego profilu</span>
+    <details class="notification-menu" hidden>
+      <summary aria-label="Powiadomienia"><span aria-hidden="true">🔔</span><span data-unread hidden></span></summary>
+      <section class="notification-popover" aria-label="Centrum powiadomień">
+        <h2>Powiadomienia</h2>
+        <div class="notification-tools"><button class="secondary" type="button" data-notification-action="readAll">Oznacz jako przeczytane</button>
+          <button class="secondary" type="button" data-notification-action="clear">Wyczyść listę</button></div>
+        <div class="notification-list"></div>
+      </section>
+    </details><button id="install" class="secondary" hidden>Zainstaluj PWA</button></header>
   <div id="content"></div>
 </main>
 <footer class="site-footer">
@@ -60,6 +69,7 @@
 <script src="restaurants.js?v=1" defer></script>
 <script src="statistics.js?v=2" defer></script>
 <script src="profile.js?v=1" defer></script>
-<script src="app.js?v=36" defer></script>
+<script src="notifications.js?v=1" defer></script>
+<script src="app.js?v=37" defer></script>
 </body>
 </html>
