@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#102a31">
   <meta name="crewconnect-api" content="">
   <link rel="icon" href="icon.png">
-  <link rel="stylesheet" href="ship-map.css">
+  <link rel="stylesheet" href="ship-map.css?v=3">
   <title>Mapa statku — CrewConnect</title>
 </head>
 <body>
@@ -89,7 +89,9 @@
           </div>
           <p class="pick-banner" id="pick-banner" hidden></p>
           <div class="map-guidance" id="map-guidance" hidden>
-            <div><p id="map-step-count"></p><strong id="map-instruction"></strong></div>
+            <div class="map-maneuver"><span id="map-maneuver" aria-hidden="true"></span>
+              <div><p id="map-step-count"></p><strong id="map-instruction"></strong></div>
+            </div>
             <div class="guidance-controls">
               <button type="button" class="button" id="previous-step" aria-label="Poprzedni krok">‹</button>
               <button type="button" class="button button-primary" id="next-step" aria-label="Następny krok">Dalej</button>
@@ -98,7 +100,8 @@
           <div class="map-viewport" id="map-viewport" tabindex="0" aria-label="Mapa pokładu do przewijania">
             <div class="map-space" id="map-space">
               <div class="map-stage" id="map-stage">
-                <canvas id="deck-map" width="1920" height="708" aria-hidden="true"></canvas>
+                <canvas id="deck-map" width="2000" height="1150" aria-hidden="true"></canvas>
+                <canvas id="route-motion" width="2000" height="1150" aria-hidden="true"></canvas>
                 <div id="map-pins"></div>
               </div>
             </div>
@@ -114,11 +117,11 @@
           </div>
         </section>
         <section class="route-card" id="route-card" aria-labelledby="route-title"></section>
-        <p class="map-note">Mapa poglądowa pokładów 4–6. Pozycję startową ustawiasz ręcznie. Na statku kieruj się oznaczeniami pokładowymi.</p>
+        <p class="map-note">Mapa poglądowa pokładów 4–7. Pozycję startową ustawiasz ręcznie. Na statku kieruj się oznaczeniami pokładowymi.</p>
       </div>
     </div>
     <p id="map-status" class="sr-only" role="status"></p>
   </main>
-  <script type="module" src="ship-map.mjs"></script>
+  <script type="module" src="ship-map.mjs?v=5"></script>
 </body>
 </html>

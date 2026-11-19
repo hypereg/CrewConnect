@@ -59,6 +59,6 @@ Aby włączyć raporty głosowe na Vercel, ustaw tam również `CREW_PASSWORD` i
 
 ## Mapa statku dla gości
 
-W menu wybierz **Mapa statku**. Demo obejmuje 10 miejsc na pokładach 4–6 Wonder of the Seas. Układ miejsc bazuje na [planach Royal Caribbean](https://www.royalcaribbean.com/cruise-ships/wonder-of-the-seas/deck-plans). Geometria korytarzy i odległości są poglądowe. Gość wybiera start z listy albo wskazuje go na mapie, następnie wybiera cel i sposób zmiany pokładu.
+W menu wybierz **Mapa statku**. Demo obejmuje 11 miejsc na pokładach 4–7 Wonder of the Seas. Mapa izometryczna pokazuje aktywny pokład i pobliski poziom, a podczas zmiany pokładu pokazuje poziom docelowy. Animowane strzałki prowadzą po korytarzach, windą lub schodami. Start wybiera się z listy lub wskazuje na mapie. Geometria korytarzy i odległości są poglądowe. [Plany Royal Caribbean](https://www.royalcaribbean.com/cruise-ships/wonder-of-the-seas/deck-plans)
 
 **Zarządzaj miejscami** pozwala dodawać, przesuwać i usuwać pinezki. Wejście można wybrać z listy lub wskazać na mapie, gdzie zostanie przypisane do najbliższego korytarza. Z `MONGODB_URI` katalog powstaje przy pierwszym odczycie w kolekcji `shipMaps`. Ustaw osobny sekret `MAP_ADMIN_PASSWORD`, aby zmiany administratora trafiały do bazy i były widoczne dla gości. W trybie demo edycje zapisują się lokalnie w przeglądarce.
