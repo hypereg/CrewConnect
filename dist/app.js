@@ -482,13 +482,19 @@ function render() {
   const calendar = page === 'kalendarz';
   const discover = page === 'zaloga';
   const profile = page === 'profil';
+  const map = page === 'mapa';
+  content.classList.toggle('map-content', map);
   document.querySelectorAll('[data-page]').forEach(link => {
-    if (link.dataset.page === (calendar || reports || discover || profile ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
+    if (link.dataset.page === (calendar || reports || discover || profile || map ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
   activatePersonalProfile();
   updateNetwork();
-  if (profile) {
+  if (map) {
+    if (!content.querySelector('.ship-map-frame')) {
+      content.innerHTML = '<iframe class="ship-map-frame" title="Mapa statku" src="navigation.html?embed=1"></iframe>';
+    }
+  } else if (profile) {
     content.innerHTML = renderUserProfile();
   } else if (discover) {
     content.innerHTML = renderCrew();

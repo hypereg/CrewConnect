@@ -28,6 +28,8 @@ a { color: var(--sea-dark); }
 .masthead-inner { min-height: 70px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .map-brand { color: white; display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 760; letter-spacing: -.035em; font-size: 20px; }
 .map-brand span { display: grid; place-items: center; width: 36px; height: 36px; background: #1e484a; color: #a9edd4; border-radius: 12px; font-size: 24px; }
+.embedded-map .map-brand { display: none; }
+.embedded-map .masthead-inner { justify-content: flex-end; }
 .modes { display: flex; gap: 4px; padding: 4px; background: #193b43; border-radius: 11px; }
 .modes button { min-height: 36px; border: 0; border-radius: 8px; padding: 5px 13px; background: transparent; color: #d2e4e3; font-size: 14px; font-weight: 650; }
 .modes button[aria-pressed=true] { background: #e9f5f1; color: var(--navy); }
