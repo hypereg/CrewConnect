@@ -93,6 +93,14 @@ test('shared cruise workflow enforces cabin capacity, event limits and role owne
   await guestA('sendMessage', {id: guestProfile.user.id, message: 'Ahoj!'});
   assert.equal((await guest('?chat=' + ala.user.id)).messages[0].text, 'Ahoj!');
   await planner('?chat=' + ala.user.id, undefined, 404);
+  await planner('resetMatches', {}, 403);
+  const resetBoard = await guestA('resetMatches', {});
+  assert.equal(resetBoard.profiles[0].match, false);
+  assert.equal(resetBoard.profiles[0].choice, undefined);
+  assert.equal((await guest()).profiles[0].choice, 'connect');
+  await guest('?chat=' + ala.user.id, undefined, 404);
+  await guestA('choose', {id: guestProfile.user.id, choice: 'connect'});
+  assert.equal((await guest('?chat=' + ala.user.id)).messages[0].text, 'Ahoj!');
 
   await admin('togglePlanner', {id: staffA.planners.find(item => item.email === staffA.plannerEmail).id, active: false});
   assert.equal((await planner()).user, null);

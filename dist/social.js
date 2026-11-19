@@ -345,7 +345,8 @@ function renderPeople() {
   const profiles = board.profiles || [];
   const candidate = profiles.find(profile => !profile.choice);
   const matches = profiles.filter(profile => profile.match);
-  return renderHeading('Poznaj załogę', 'Osoby z Twojego rejsu') +
+  return renderHeading('Poznaj załogę', 'Osoby z Twojego rejsu',
+    !offline && user.role === 'guest' ? button('Usuń historię dopasowań', 'resetMatches', '', '', 'secondary') : '') +
     (offline ? empty('Dopasowania są dostępne online') : user.role !== 'guest' ? empty('Dopasowania są dostępne dla gości rejsu') :
       !user.visible ? card('<h2>Pokaż swój profil</h2><p>Po włączeniu widoczności możesz przeglądać karty i zobaczyć wzajemne dopasowania.</p>' +
         '<a class="button primary" href="#konto">Ustaw widoczność profilu</a>', 'empty') :
@@ -662,6 +663,7 @@ content.addEventListener('click', event => {
   if (offline) return;
   if (action === 'chat') return openChat(id);
   const confirms = {
+    resetMatches: 'Usunąć wszystkie Twoje polubienia, pominięcia i dopasowania? Wiadomości zostaną zachowane.',
     closeVoyage: 'Zakończyć rejs? Kody QR przestaną działać.',
     revokeQr: 'Unieważnić QR tej kabiny?',
     cancelEvent: 'Odwołać to wydarzenie?',
@@ -672,7 +674,7 @@ content.addEventListener('click', event => {
   if (confirms[action] && !window.confirm(confirms[action])) return;
   const payload = ['skip', 'connect'].includes(action) ? {action: 'choose', id, choice: action} :
     {action, id, ...(action === 'togglePlanner' && {active: control.dataset.active === 'true'})};
-  const messages = {join: 'Zapisano na wydarzenie.', leave: 'Wypisano z wydarzenia.', closeVoyage: 'Rejs zakończony.',
+  const messages = {resetMatches: 'Usunięto historię dopasowań.', join: 'Zapisano na wydarzenie.', leave: 'Wypisano z wydarzenia.', closeVoyage: 'Rejs zakończony.',
     cancelEvent: 'Wydarzenie odwołane.', togglePlanner: 'Zapisano status konta.', revokeQr: 'Kod QR unieważniony.'};
   void mutate(payload, {message: messages[action], after: action === 'connect' ? () => openChat(id, true) : undefined});
 });

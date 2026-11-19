@@ -313,6 +313,11 @@ function memberAction(state, body, user, voyage) {
       user.visible = user.role === 'guest' && body.visible === true;
       return {};
     }
+    case 'resetMatches': {
+      if (user.role !== 'guest') fail(403, 'Ta operacja jest dostępna dla gości rejsu.');
+      state.choices = state.choices.filter(choice => choice.from !== user.id);
+      return {};
+    }
     case 'choose': {
       const person = state.accounts.find(item => item.id === body.id);
       if (!user.visible || !person?.visible || !person.active || person.id === user.id || !membership(person, voyage)) {

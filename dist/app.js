@@ -358,6 +358,7 @@ function renderOnlineDiscovery() {
     </div><div class="crew-filter">
     <button class="secondary" data-action="online-publish">Zaktualizuj profil online</button>
     <button class="secondary" data-action="online-hide">Ukryj profil online</button>
+    <button class="secondary" data-action="online-reset">Usuń historię dopasowań</button>
     ${skippedOnline.size ? '<button class="secondary" data-action="online-revisit">Pokaż pominięte</button>' : ''}
     </div><div class="crew-layout"><section aria-label="Profile online">${card}</section>
     <aside class="card crew-matches"><h2>Dopasowania online</h2>${matches.map(profile => `<div class="crew-match">
@@ -758,6 +759,13 @@ content.addEventListener('click', e => {
   }
   if (action === 'online-hide' && personalDiscovery()) {
     void updateOnlineDiscovery({action: 'hide'}, 'Profil ukryty.');
+    return;
+  }
+  if (action === 'online-reset' && personalDiscovery()) {
+    if (window.confirm('Usunąć wszystkie Twoje polubienia i dopasowania? Wiadomości zostaną zachowane.')) {
+      skippedOnline.clear();
+      void updateOnlineDiscovery({action: 'resetMatches'}, 'Usunięto historię dopasowań.');
+    }
     return;
   }
   if (action === 'online-revisit') {

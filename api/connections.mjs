@@ -71,6 +71,10 @@ export default async function connections(req, res) {
       await profiles.deleteOne({_id: me});
       return send(res, 200, {ok: true});
     }
+    if (body?.action === 'resetMatches') {
+      await matches.updateMany({likes: me}, {$pull: {likes: me}});
+      return send(res, 200, {ok: true});
+    }
     const peer = body?.peer;
     if (!validId(peer) || peer === me) return send(res, 400, {error: 'Nieprawidłowy profil.'});
     const id = pair(me, peer);

@@ -1,6 +1,6 @@
-const cacheName = 'crewconnect-shell-social-v4';
-const assets = ['./', 'index.html', 'social.css?v=2', 'social.js?v=2', 'manifest.webmanifest', 'icon.png', 'icon-large.png',
-  'legacy.html', 'style.css?v=18', 'voice.js?v=18', 'duties.js?v=18', 'app.js?v=18'];
+const cacheName = 'crewconnect-shell-social-v5';
+const assets = ['./', 'index.html', 'social.css?v=2', 'social.js?v=3', 'manifest.webmanifest', 'icon.png', 'icon-large.png',
+  'legacy.html', 'style.css?v=18', 'voice.js?v=18', 'duties.js?v=18', 'app.js?v=19'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(assets)).then(() => self.skipWaiting()));
 });
