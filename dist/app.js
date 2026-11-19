@@ -47,6 +47,7 @@ const publishEvent = event => updateSharedEvent({
   ...event, capacity: event.capacity ?? 30, action: 'publish', displayName: personalName(event.owner)
 }, 'Wydarzenie jest widoczne na tablicy załogi.');
 const pendingKey = 'crewconnect-workspace-pending';
+const logoutKey = 'crewconnect-session-ended';
 const apiBase = document.querySelector('meta[name="crewconnect-api"]')?.content;
 const workspaceUrl = apiBase ? new URL('/api/workspace', apiBase).href : 'api/workspace';
 const tokenKey = 'crewconnect-workspace-token:' + workspaceUrl;
@@ -233,6 +234,8 @@ function renderUserProfile() {
         ${profile ? profileDetails(profile) : '<h2>Przedstaw się załodze</h2><p class="muted">Wybierz nazwę i dodaj kilka słów o sobie.</p>'}
         <footer>
           <button class="primary" data-action="profile-edit">${profile ? 'Edytuj profil' : 'Utwórz profil'}</button>
+          ${apiBase ? '' : profile ? '<button class="secondary" data-action="profile-logout">Wyloguj się</button>' :
+            '<button class="secondary" data-action="profile-login">Zaloguj się kodem</button>'}
         </footer>
       </div>
     </article>
@@ -552,6 +555,64 @@ function openForm(name, fields, submitLabel, onSubmit) {
   dialog.showModal();
 }
 
+async function accountSession(action, code) {
+  const response = await fetch(workspaceUrl, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action, code})
+  });
+  if (!response.ok) {
+    throw new Error(response.status === 401 && action === 'login' ? 'Kod jest nieprawidłowy lub został już użyty.' :
+      'Operacja się nie powiodła. Sprawdź połączenie i spróbuj ponownie.');
+  }
+  return response;
+}
+
+function resetProfileSession() {
+  localStorage.removeItem(storageKey);
+  localStorage.removeItem(pendingKey);
+  localStorage.removeItem(tokenKey);
+  clearDutySession();
+  schedule = null;
+  scheduleError = null;
+  onlineDiscovery = undefined;
+  onlineSearch = '';
+  onlineError = '';
+  skippedOnline.clear();
+  state = {member: '', events: [], reports: []};
+  render();
+}
+
+function beginProfileLogout() {
+  const code = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, '0')).join('');
+  openForm('Wyloguj się', `
+    <p>Zachowaj kod w bezpiecznym miejscu. Umożliwia jednorazowy powrót do Twojego profilu, także na innym urządzeniu.</p>
+    <label>Kod powrotu <input value="${code}" readonly autocomplete="off" spellcheck="false"></label>
+    <label><span><input type="checkbox" required> Zapisałem kod powrotu</span></label>`,
+    'Wyloguj się', async () => {
+      await syncWorkspace();
+      if (localStorage.getItem(pendingKey)) throw new Error('Najpierw zsynchronizuj dane. Sprawdź połączenie.');
+      await accountSession('logout', code);
+      resetProfileSession();
+      localStorage.setItem(logoutKey, crypto.randomUUID());
+      announce('Wylogowano.');
+    });
+}
+
+function beginProfileLogin() {
+  openForm('Zaloguj się kodem', `
+    <label>Kod powrotu <input name="code" required maxlength="64" autocomplete="off" spellcheck="false"></label>`,
+    'Zaloguj się', async data => {
+      const code = data.get('code').trim().toLowerCase();
+      if (!/^[a-f0-9]{64}$/.test(code)) throw new Error('Wpisz 64-znakowy kod powrotu.');
+      if (syncing) await syncing;
+      const response = await accountSession('login', code);
+      state = await response.json();
+      localStorage.removeItem(pendingKey);
+      localStorage.setItem(storageKey, JSON.stringify(state));
+      render();
+      announce('Przywrócono Twój profil.');
+    });
+}
+
 function editUserProfile(publishOnline = false) {
   const profile = state.userProfile;
   openForm(profile ? 'Edytuj profil' : 'Dodaj nowy profil', `
@@ -683,6 +744,14 @@ content.addEventListener('click', e => {
   const {action, id} = button.dataset;
   if (action === 'online-profile-edit') {
     editUserProfile(true);
+    return;
+  }
+  if (action === 'profile-logout' && state.userProfile) {
+    beginProfileLogout();
+    return;
+  }
+  if (action === 'profile-login' && !state.userProfile) {
+    beginProfileLogin();
     return;
   }
   if (action === 'profile-edit') {
@@ -862,6 +931,11 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden && isDutyPage()) void loadDuties();
 });
 window.addEventListener('storage', event => {
+  if (event.key === logoutKey && event.newValue) {
+    if (dialog.open) dialog.close();
+    resetProfileSession();
+    return;
+  }
   if (event.key === storageKey && event.newValue) {
     state = JSON.parse(event.newValue);
     render();
