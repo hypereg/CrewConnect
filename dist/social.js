@@ -195,6 +195,16 @@ async function loadInvite(token) {
   render();
 }
 
+const sixDigitCode = autocomplete => field('Kod sześciocyfrowy', 'code', '',
+  'inputmode="numeric" pattern="[0-9]{6}" required maxlength="6" autocomplete="' + autocomplete + '"');
+
+function demoCabinForm(email) {
+  return form('joinDemoCabin', (email ? '<p>Nowe konto dla <strong>' + escape(email) + '</strong></p>' : '') +
+    '<p class="input-note">Wpisz kod demo <strong>123456</strong>, aby dołączyć do kabiny z wolnym miejscem.</p>' +
+    sixDigitCode('off'), submit('Dołącz do kabiny demo') +
+    (email ? button('Zmień e-mail', 'changeLoginEmail', '', '', 'secondary') : ''));
+}
+
 function renderLogin(page) {
   const emailField = value => field('Adres e-mail', 'email', value, 'type="email" autocomplete="email" required maxlength="120"');
   if (page === 'rejestracja') {
@@ -209,22 +219,26 @@ function renderLogin(page) {
             emailField(''), submit(board?.user?.role === 'guest' ? 'Dołącz do rejsu' : 'Utwórz konto')))) :
         empty(invite?.error ? 'Zaproszenie niedostępne' : 'Sprawdzamy zaproszenie', escape(invite?.error || 'To potrwa chwilę.'))) + '</div>';
   }
-  const {email, code, requiresAccessCode} = loginFlow;
+  const {email, code, requiresAccessCode, demoSignup} = loginFlow;
   const loginForm = code || requiresAccessCode ? form('login',
     '<p>Logujesz się jako <strong>' + escape(email) + '</strong></p>' +
     (code ? '<aside class="notice login-code-notice" aria-label="Powiadomienie z kodem demo">' +
       '<strong>Kod logowania demo</strong><p>Ważny przez 10 minut.</p><div class="button-row">' +
       '<input id="demo-login-code" aria-label="Kod z powiadomienia" readonly value="' + escape(code) + '">' +
       button('Kopiuj kod', 'copyLoginCode', '', '', 'secondary') + '</div></aside>' +
-      field('Kod sześciocyfrowy', 'code', '', 'inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required maxlength="6"') :
+      sixDigitCode('one-time-code') :
       field('Kod dostępu', 'code', '', 'type="password" autocomplete="current-password" required maxlength="100"')),
     submit('Zaloguj się') + (code ? button('Pobierz nowy kod', 'newLoginCode', '', '', 'secondary') : '') +
     button('Zmień e-mail', 'changeLoginEmail', '', '', 'secondary')) :
     form('requestLoginCode', emailField(email), submit('Dalej')) +
-    '<p class="input-note">Użyj e-maila podanego przy rejestracji. Kod demo pojawi się na ekranie.</p>';
+    '<p class="input-note">Użyj e-maila podanego przy rejestracji lub wpisz nowy adres, aby przetestować demo.</p>';
+  const token = route().token;
+  const signup = token ? '<p>Ten adres nie ma jeszcze konta.</p>' +
+    back('rejestracja?kod=' + encodeURIComponent(token), 'Zarejestruj się z zaproszenia do kabiny') +
+    button('Zmień e-mail', 'changeLoginEmail', '', '', 'secondary') : demoCabinForm(email);
   return '<div class="auth-view">' + renderHeading('Zaloguj się') +
     (connectionError ? '<p class="notice warning">' + escape(connectionError) + '</p>' : '') +
-    card(loginForm) +
+    card(demoSignup ? signup : loginForm) +
     card('<h2>Pierwszy raz na pokładzie?</h2><p>Otwórz link otrzymany od administratora lub zeskanuj kod QR z zaproszenia.</p>') + '</div>';
 }
 
@@ -588,9 +602,10 @@ function render(focus = false) {
   else if ((page === 'dodaj' || page === 'edytuj') && user.role !== 'guest') content.innerHTML = renderEventForm(id);
   else if (page === 'dodaj-spotkanie' || page === 'edytuj-spotkanie') content.innerHTML = renderGuestEventForm(id, date);
   else if (page === 'wydarzenie' && (canUseBoard || user.role === 'admin')) content.innerHTML = renderDetail(id);
-  else if (!canUseBoard) content.innerHTML = renderHeading(user.role === 'guest' ? 'Dołącz do rejsu' : 'Wydarzenia') +
-    empty(user.role === 'guest' ? 'Zeskanuj kod w kabinie' : 'Brak aktywnego rejsu',
-      user.role === 'guest' ? 'Zaproszenie QR przypisze Twoje konto do kabiny w bieżącym rejsie.' : '');
+  else if (!canUseBoard) content.innerHTML = user.role === 'guest' ?
+    '<div class="auth-view">' + renderHeading('Dołącz do rejsu', 'Otwórz zaproszenie do swojej kabiny lub dołącz do kabiny demo.') +
+      card(demoCabinForm()) + '</div>' :
+    renderHeading('Wydarzenia') + empty('Brak aktywnego rejsu');
   else if (page === 'moje-zapisy') content.innerHTML = renderBookings();
   else if (page === 'kalendarz') content.innerHTML = renderCalendar();
   else if (page === 'poznaj') content.innerHTML = renderPeople();
@@ -736,11 +751,11 @@ async function requestLoginCode(address, element) {
       await request({action: 'logout'});
       writeLocal(logoutKey, 'done');
     }
-    const {code, requiresAccessCode} = await request({action: 'requestLoginCode', email: address});
+    const step = await request({action: 'requestLoginCode', email: address});
     if (!element.isConnected) return;
-    loginFlow = {email: address, code, requiresAccessCode};
+    loginFlow = {email: address, ...step};
     render();
-    content.querySelector('input[name="code"]')?.focus();
+    (content.querySelector('input[name="code"]') || content.querySelector('.auth-view a.back'))?.focus();
   } catch (error) {
     failure.textContent = error.status ? error.message : 'Sprawdź połączenie i spróbuj ponownie.';
     failure.hidden = false;
@@ -772,7 +787,7 @@ content.addEventListener('submit', event => {
   const formError = element.querySelector('.form-error');
   if (action === 'requestLoginCode') return void requestLoginCode(data.email.trim(), element);
   const payload = {action, ...data};
-  if (action === 'login') payload.email = loginFlow.email;
+  if (action === 'login' || (action === 'joinDemoCabin' && loginFlow.demoSignup)) payload.email = loginFlow.email;
   if (action === 'register') payload.token = route().token;
   if (action === 'addCabins') {
     payload.voyageId = board.voyage.id;
@@ -807,6 +822,10 @@ content.addEventListener('submit', event => {
     register: () => {
       loginFlow = {email: ''};
       navigate('wydarzenia');
+    },
+    joinDemoCabin: () => {
+      loginFlow = {email: ''};
+      navigate('profil');
     },
     saveEvent: () => navigate(board.user.role === 'admin' ? 'admin' : 'planner'),
     saveGuestEvent: id => navigate('wydarzenie/' + id)
