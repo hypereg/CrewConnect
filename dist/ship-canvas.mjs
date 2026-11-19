@@ -2,7 +2,8 @@ import {CORES, CORRIDORS, DECKS} from './ship-data.mjs?v=2';
 
 export const SCENE_WIDTH = 1000;
 export const SCENE_HEIGHT = 575;
-const DECK_GAP = 176;
+const DECK_RISE = 42;
+const HULL_DEPTH = 24;
 const origin = {x: 104, y: 159};
 const along = {x: 0.94, y: 0.17};
 const across = {x: -0.31, y: 0.60};
@@ -26,12 +27,8 @@ export function unprojectPoint({x, y}, elevation = 0) {
   };
 }
 
-export function stackDecks(active, other) {
-  const activeIsUpper = active > other;
-  return {
-    active: {deck: active, elevation: activeIsUpper ? DECK_GAP : 0},
-    other: {deck: other, elevation: activeIsUpper ? 0 : DECK_GAP}
-  };
+export function deckElevation(deck) {
+  return (deck - DECKS[0].id) * DECK_RISE;
 }
 const plans = {
   4: [
@@ -152,54 +149,41 @@ function building(ctx, [x, y, width, height, name, category], elevation, wallHei
   text(ctx, name, label.x, label.y, ink, width > 110 ? '730 15px system-ui' : '700 12px system-ui', width * 0.88);
 }
 
-function drawNeighbor(ctx, {deck, elevation}) {
-  planSpace(ctx, -elevation, () => {
-    for (const [x, y, w, h] of plans[deck]) box(ctx, x, y, w, h, '#d8e7ec', '#b8cfd8', 3);
-  });
-  for (const {x} of CORES) {
-    const core = projectPoint({x, y: 176}, elevation);
-    box(ctx, core.x - 11, core.y - 8, 22, 16, '#6f9aa9', '#f3f8fa', 4);
-    text(ctx, '↕', core.x, core.y, '#fff', '750 11px system-ui');
-  }
-}
-
-function drawPlatform(ctx, elevation, active) {
+function drawHull(ctx, elevation) {
   hull ??= new Path2D(hullOutline);
-  if (elevation === 0) {
-    ctx.save();
-    ctx.shadowColor = '#1e566060';
-    ctx.shadowBlur = 22;
-    ctx.shadowOffsetY = 9;
-    ctx.fillStyle = '#6c939e';
-    planSpace(ctx, 26, () => ctx.fill(hull));
-    ctx.restore();
+  ctx.save();
+  ctx.shadowColor = '#1e566060';
+  ctx.shadowBlur = 22;
+  ctx.shadowOffsetY = 9;
+  ctx.fillStyle = '#6c939e';
+  planSpace(ctx, HULL_DEPTH, () => ctx.fill(hull));
+  ctx.restore();
+
+  // Each sweep fills the side; the selected deck is the only exposed surface.
+  for (let depth = HULL_DEPTH; depth > -elevation; depth--) {
+    if (depth >= 14) ctx.fillStyle = '#1e5061';
+    else if (depth > 0) ctx.fillStyle = '#3c7686';
+    else {
+      const seam = -depth % DECK_RISE;
+      ctx.fillStyle = seam < 3 ? '#527f8a' : seam < 10 ? '#a1bfc7' : '#bfd4d9';
+    }
+    planSpace(ctx, depth, () => ctx.fill(hull));
   }
-  for (let depth = 24; depth >= 0; depth--) {
-    if (depth === 0) ctx.fillStyle = active ? '#f8fbfa' : '#eff6f7';
-    else if (depth > 18) ctx.fillStyle = active ? '#345e6a' : '#789daa';
-    else ctx.fillStyle = active ? '#bed3d6' : '#bcd2da';
-    planSpace(ctx, depth - elevation, () => ctx.fill(hull));
+  ctx.fillStyle = '#f8fbfa';
+  planSpace(ctx, -elevation, () => ctx.fill(hull));
+
+  ctx.fillStyle = '#486e7b';
+  for (let level = 0; level < elevation; level += DECK_RISE) {
+    for (let x = 217; x < 805; x += 25) {
+      const point = projectPoint({x, y: 297}, level + 14);
+      ctx.beginPath();
+      ctx.ellipse(point.x, point.y, 4.2, 2.6, 0.17, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
-  ctx.fillStyle = active ? '#547481' : '#789ba7';
-  for (let x = 202; x < 805; x += 24) {
-    const point = projectPoint({x, y: 297}, elevation - 11);
-    ctx.beginPath();
-    ctx.ellipse(point.x, point.y, 4.2, 2.3, 0.16, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.strokeStyle = active ? '#7ca6ac' : '#7c9fab';
+  ctx.strokeStyle = '#7ca6ac';
   ctx.lineWidth = 2;
   planSpace(ctx, -elevation, () => ctx.stroke(hull));
-}
-
-function drawStackGuides(ctx) {
-  ctx.save();
-  ctx.setLineDash([5, 6]);
-  ctx.lineCap = 'round';
-  for (const point of [{x: 35, y: 177}, {x: 927, y: 177}]) {
-    line(ctx, projectPoint(point, DECK_GAP), projectPoint(point), '#4a7987', 2.5);
-  }
-  ctx.restore();
 }
 
 function chevron(ctx, point, angle, size) {
@@ -218,12 +202,12 @@ function chevron(ctx, point, angle, size) {
   ctx.restore();
 }
 
-export function drawRouteArrows(canvas, stack, step, elapsed) {
+export function drawRouteArrows(canvas, step, elapsed) {
   const ctx = contextFor(canvas);
   ctx.clearRect(0, 0, SCENE_WIDTH, SCENE_HEIGHT);
   if (!step || step.type === 'arrival') return;
-  const from = projectPoint(step.point, stack.active.elevation);
-  const to = projectPoint(step.endPoint, step.type === 'walk' ? stack.active.elevation : stack.other.elevation);
+  const from = projectPoint(step.point, deckElevation(step.point.deck));
+  const to = projectPoint(step.endPoint, deckElevation(step.endPoint.deck));
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const length = Math.hypot(dx, dy);
@@ -258,8 +242,7 @@ function drawCorridors(ctx, elevation) {
   for (const [from, to] of CORRIDORS) line(ctx, projectPoint(from, elevation), projectPoint(to, elevation), '#fff', 13);
 }
 
-function drawRoute(ctx, stack, legs, step) {
-  const {deck, elevation} = stack.active;
+function drawRoute(ctx, deck, elevation, legs, step) {
   const onDeck = point => projectPoint(point, elevation);
   const walking = legs.filter(leg => leg.type === 'walk' && leg.from.deck === deck)
     .map(({from, to}) => [onDeck(from), onDeck(to)]);
@@ -279,7 +262,7 @@ function drawRoute(ctx, stack, legs, step) {
   }
   if (step?.type === 'lift' || step?.type === 'stairs') {
     const from = onDeck(step.point);
-    const to = projectPoint(step.endPoint, stack.other.elevation);
+    const to = projectPoint(step.endPoint, deckElevation(step.endPoint.deck));
     line(ctx, from, to, '#fff', 16);
     line(ctx, from, to, '#075f50', 11);
     ctx.beginPath();
@@ -314,7 +297,7 @@ function drawRoute(ctx, stack, legs, step) {
   }
 }
 
-function drawActive(ctx, {deck, elevation}) {
+function drawActive(ctx, deck, elevation) {
   planSpace(ctx, -elevation, () => {
     box(ctx, 124, 153, 738, 49, '#edf4f1', '#e0ebe7');
   });
@@ -328,7 +311,7 @@ function drawActive(ctx, {deck, elevation}) {
   for (const {x} of CORES) building(ctx, [x - 19, 158, 38, 39, '≋  ↕', 'service'], elevation, 8);
 }
 
-export function drawDeck(canvas, stack, legs, step, draft) {
+export function drawDeck(canvas, deck, legs, step, draft) {
   const ctx = contextFor(canvas);
   const water = ctx.createLinearGradient(0, 0, 0, SCENE_HEIGHT);
   water.addColorStop(0, '#dfeff0');
@@ -338,17 +321,12 @@ export function drawDeck(canvas, stack, legs, step, draft) {
   for (let y = 17; y < SCENE_HEIGHT; y += 25) {
     line(ctx, {x: 0, y}, {x: SCENE_WIDTH, y}, '#a9c8cf45', 1);
   }
-  drawStackGuides(ctx);
-  const layers = [stack.active, stack.other].sort((a, b) => a.elevation - b.elevation);
-  for (const layer of layers) {
-    const active = layer === stack.active;
-    drawPlatform(ctx, layer.elevation, active);
-    if (active) drawActive(ctx, layer);
-    else drawNeighbor(ctx, layer);
-  }
-  drawRoute(ctx, stack, legs, step);
-  if (draft?.deck === stack.active.deck) {
-    const point = projectPoint(draft, stack.active.elevation);
+  const elevation = deckElevation(deck);
+  drawHull(ctx, elevation);
+  drawActive(ctx, deck, elevation);
+  drawRoute(ctx, deck, elevation, legs, step);
+  if (draft?.deck === deck) {
+    const point = projectPoint(draft, elevation);
     ctx.beginPath();
     ctx.arc(point.x, point.y, 9, 0, 2 * Math.PI);
     ctx.fillStyle = '#ecbe55';
@@ -357,6 +335,6 @@ export function drawDeck(canvas, stack, legs, step, draft) {
     ctx.lineWidth = 2;
     ctx.stroke();
   }
-  text(ctx, 'D Z I Ó B', 46, 178, '#376271', '750 11px system-ui');
-  text(ctx, 'R U F A', 954, 334, '#376271', '750 11px system-ui');
+  text(ctx, 'D Z I Ó B', 46, 256 - elevation, '#376271', '750 11px system-ui');
+  text(ctx, 'R U F A', 954, 408 - elevation, '#376271', '750 11px system-ui');
 }

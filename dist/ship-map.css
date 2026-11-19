@@ -109,25 +109,6 @@ textarea { resize: vertical; }
 .map-stage.deck-change { animation: deck-reveal 230ms ease-out; }
 @keyframes deck-reveal { from { opacity: .35; } to { opacity: 1; } }
 #map-pins { position: absolute; inset: 0; pointer-events: none; }
-.layer-label {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  width: max-content;
-  pointer-events: auto;
-  border: 1px solid #91afba;
-  border-radius: 6px;
-  background: #f4fafb;
-  color: #244d5e;
-  padding: 4px 7px;
-  font-size: 12px;
-  font-weight: 750;
-}
-.layer-label:not(.layer-active):hover { background: #daeef0; border-color: #4c7b8b; }
-.layer-label.layer-active { border-color: #265964; background: #164654; color: white; pointer-events: none; }
 .map-pin {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -220,7 +201,6 @@ textarea { resize: vertical; }
   .map-guidance { padding-inline: 9px; }
   .map-maneuver { gap: 6px; }
   #map-maneuver { flex-basis: 30px; height: 30px; font-size: 20px; }
-  .layer-label { padding: 2px 4px; font-size: 10px; }
   .route-head { flex-wrap: wrap; gap: 6px; }
 }
 
