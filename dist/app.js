@@ -25,6 +25,38 @@ const genderFilters = {all: 'Wszystkich', women: 'Kobiety', men: 'Mężczyzn'};
 const preferredGender = () => state.crewPreferences?.[state.member] ?? 'all';
 const matchesPreference = profile => preferredGender() === 'all' || profile.gender === preferredGender();
 const storageKey = 'crewconnect-v1';
+const pendingKey = 'crewconnect-mysql-pending';
+let syncing = false;
+
+async function syncWorkspace() {
+  if (syncing || !navigator.onLine) return;
+  syncing = true;
+  try {
+    const response = await fetch('api/workspace', {cache: 'no-store'});
+    if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return;
+    const snapshot = await response.json();
+    let pending = localStorage.getItem(pendingKey);
+    if (!pending && snapshot) {
+      state = snapshot;
+      localStorage.setItem(storageKey, JSON.stringify(state));
+      render();
+    }
+    if (!pending && !snapshot) pending = localStorage.getItem(storageKey);
+    while (pending) {
+      const result = await fetch('api/workspace', {
+        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: pending
+      });
+      if (!result.ok) return;
+      const latest = localStorage.getItem(pendingKey);
+      if (latest === pending) localStorage.removeItem(pendingKey);
+      pending = latest === pending ? null : latest;
+    }
+  } catch {
+    // A later save, reload or reconnect retries the locally stored changes.
+  } finally {
+    syncing = false;
+  }
+}
 const dateValue = (offset = 0) => {
   const date = new Date();
   date.setDate(date.getDate() + offset);
@@ -221,7 +253,10 @@ function render() {
 }
 
 function save(message) {
-  localStorage.setItem(storageKey, JSON.stringify(state));
+  const snapshot = JSON.stringify(state);
+  localStorage.setItem(storageKey, snapshot);
+  localStorage.setItem(pendingKey, snapshot);
+  void syncWorkspace();
   render();
   if (!message) return;
   clearTimeout(noticeTimer);
@@ -412,7 +447,10 @@ window.addEventListener('storage', event => {
 const updateNetwork = () => {
   document.querySelector('#network').textContent = navigator.onLine ? 'Tryb demo' : 'Demo · offline';
 };
-window.addEventListener('online', updateNetwork);
+window.addEventListener('online', () => {
+  updateNetwork();
+  void syncWorkspace();
+});
 window.addEventListener('offline', updateNetwork);
 window.addEventListener('beforeinstallprompt', event => {
   event.preventDefault();
@@ -427,3 +465,4 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
 member.innerHTML = crew.map(name => `<option>${escape(name)}</option>`).join('');
 updateNetwork();
 render();
+void syncWorkspace();
