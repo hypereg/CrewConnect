@@ -1,7 +1,9 @@
 import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { Readable } from 'node:stream';
 import { MongoClient } from 'mongodb';
+import { createDutyApi } from './crew-duties.mjs';
 
 const { MONGODB_URI, MONGODB_DATABASE = 'crewconnect', FRONTEND_ORIGIN, PORT = '3000' } = process.env;
 if (!MONGODB_URI) throw new Error('Set MONGODB_URI before starting.');
@@ -15,12 +17,15 @@ try {
   process.exit(1);
 }
 const workspaces = db.collection('workspaces');
+const dutyApi = createDutyApi(db, process.env);
 
 const assets = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
+  ['/duties.js', ['duties.js', 'text/javascript; charset=utf-8']],
+  ['/voice.js', ['voice.js', 'text/javascript; charset=utf-8']],
   ['/sw.js', ['sw.js', 'text/javascript; charset=utf-8']],
   ['/manifest.webmanifest', ['manifest.webmanifest', 'application/manifest+json']],
   ['/icon.png', ['icon.png', 'image/png']],
@@ -30,6 +35,23 @@ const assets = new Map([
 createServer(async (req, res) => {
   const path = req.url.split('?')[0];
   try {
+    if (['/api/duties', '/api/duties/completion', '/api/reports', '/api/reports/draft'].includes(path)) {
+      const crossOrigin = FRONTEND_ORIGIN && req.headers.origin === FRONTEND_ORIGIN;
+      res.setHeader('Vary', 'Origin');
+      if (crossOrigin) {
+        res.setHeader('Access-Control-Allow-Origin', FRONTEND_ORIGIN);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+      }
+      if (req.method === 'OPTIONS') return res.writeHead(crossOrigin ? 204 : 403).end();
+      const request = new Request(new URL(path, 'http://localhost'), {
+        method: req.method, headers: req.headers,
+        ...(req.method === 'POST' ? {body: Readable.toWeb(req), duplex: 'half'} : {})
+      });
+      const response = await dutyApi(path, request);
+      return res.writeHead(response.status, Object.fromEntries(response.headers))
+        .end(Buffer.from(await response.arrayBuffer()));
+    }
     if (path === '/api/workspace') {
       const browserOrigin = req.headers.origin;
       const crossOrigin = Boolean(FRONTEND_ORIGIN && browserOrigin === FRONTEND_ORIGIN);
@@ -85,7 +107,10 @@ createServer(async (req, res) => {
     const asset = assets.get(path);
     if (req.method !== 'GET' || !asset) return res.writeHead(404).end();
     const [file, contentType] = asset;
-    const body = await readFile(new URL('dist/' + file, import.meta.url));
+    let body = await readFile(new URL('dist/' + file, import.meta.url));
+    if (file === 'index.html') {
+      body = body.toString('utf8').replace('<head>', '<head>\n<meta name="crewconnect-shared" content="yes">');
+    }
     return res.writeHead(200, {'Content-Type': contentType, 'X-Content-Type-Options': 'nosniff'}).end(body);
   } catch (error) {
     console.error('CrewConnect request failed', error.code ?? error.name);

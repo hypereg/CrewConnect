@@ -162,7 +162,7 @@ function renderCalendar() {
 const stat = (count, label) => `<div class="stat"><b>${count}</b><span>${label}</span></div>`;
 const title = (eyebrow, heading, description, action, label) => `
   <section class="hero"><div><span class="eyebrow">${eyebrow}</span><h1>${heading}</h1><p>${description}</p></div>
-  <button class="primary" data-action="${action}">+ ${label}</button></section>`;
+  ${action ? `<button class="primary" data-action="${action}">+ ${label}</button>` : ''}</section>`;
 
 function eventCard(event) {
   const people = participants(event);
@@ -247,14 +247,7 @@ function render() {
   } else if (calendar) {
     content.innerHTML = renderCalendar();
   } else if (reports) {
-    const ordered = [...state.reports].sort((a, b) => b.date.localeCompare(a.date));
-    content.innerHTML = title('Dziennik pokładowy', 'Raporty obowiązków', 'Zapisuj wykonane zadania i zgłaszaj, co wymaga dalszej pracy.', 'report', 'Dodaj raport') +
-      `<div class="stats">${stat(ordered.length, 'Wszystkie raporty')}${stat(ordered.filter(report => report.status === 'Wykonano').length, 'Wykonane')}${stat(ordered.filter(report => report.status === 'Wymaga uwagi').length, 'Wymagają uwagi')}</div>
-      <section class="section"><h2>Dziennik załogi</h2><div class="grid">${ordered.map(report => `<article class="card">
-      <span class="badge">${escape(report.status)}</span><h3>${escape(report.title)}</h3>
-      <p class="muted">${formatDate(report.date)} · ${escape(report.owner)}</p>
-      ${report.notes ? `<p>${escape(report.notes)}</p>` : ''}
-      ${report.owner === state.member ? `<footer><button class="secondary" data-action="report" data-id="${report.id}">Edytuj raport</button></footer>` : ''}</article>`).join('') || '<p class="empty">Brak raportów.</p>'}</div></section>`;
+    content.innerHTML = renderDuties();
   } else {
     content.innerHTML = title('Życie na pokładzie', 'Aktywności załogi', 'Zaproponuj wydarzenie i znajdź termin, który pasuje wszystkim zapisanym.', 'event', 'Nowa aktywność') +
       `<div class="stats">${stat(state.events.length, 'Aktywności')}${stat(state.events.filter(event => event.votes[state.member]).length, 'Moje zapisy')}${stat(state.events.filter(event => sharedSlots(event).length).length, 'Uzgodnione terminy')}</div>
@@ -268,7 +261,10 @@ function save(message) {
   localStorage.setItem(pendingKey, snapshot);
   void syncWorkspace();
   render();
-  if (!message) return;
+  if (message) showNotice(message);
+}
+
+function showNotice(message) {
   clearTimeout(noticeTimer);
   notice.textContent = message;
   noticeTimer = setTimeout(() => { notice.textContent = ''; }, 3500);
@@ -276,12 +272,25 @@ function save(message) {
 
 function openForm(name, fields, submitLabel, onSubmit) {
   dialog.innerHTML = `<div class="dialog-head"><h2 id="dialog-title">${name}</h2><button type="button" data-close class="secondary" aria-label="Zamknij">✕</button></div>
-    <form>${fields}<button class="primary">${submitLabel}</button></form>`;
+    <form>${fields}<p class="form-error" data-submit-error role="alert" hidden></p><button class="primary">${submitLabel}</button></form>`;
   dialog.setAttribute('aria-labelledby', 'dialog-title');
   dialog.querySelector('[data-close]').onclick = () => dialog.close();
-  dialog.querySelector('form').onsubmit = event => {
+  dialog.querySelector('form').onsubmit = async event => {
     event.preventDefault();
-    if (onSubmit(new FormData(event.currentTarget), event.currentTarget) !== false) dialog.close();
+    const form = event.currentTarget;
+    const submit = form.querySelector('button:not([type])');
+    const error = form.querySelector('[data-submit-error]');
+    if (submit.disabled) return;
+    submit.disabled = true;
+    error.hidden = true;
+    try {
+      if (await onSubmit(new FormData(form), form) !== false && dialog.open && form.isConnected) dialog.close();
+    } catch (failure) {
+      error.textContent = failure.message || 'Zapis się nie powiódł.';
+      error.hidden = false;
+    } finally {
+      submit.disabled = false;
+    }
   };
   dialog.showModal();
 }
@@ -341,29 +350,6 @@ function vote(event) {
   });
 }
 
-function editReport(report) {
-  const statuses = ['Wykonano', 'W trakcie', 'Wymaga uwagi'];
-  openForm(report ? 'Edytuj raport' : 'Nowy raport', `
-    <label>Obowiązek <input name="title" required maxlength="100" value="${escape(report?.title || '')}"></label>
-    <label>Data <input name="date" type="date" required value="${report?.date || dateValue()}"></label>
-    <label>Status <select name="status">${statuses.map(status => `<option${status === report?.status ? ' selected' : ''}>${status}</option>`).join('')}</select></label>
-    <label>Notatka <textarea name="notes" maxlength="1000">${escape(report?.notes || '')}</textarea></label>`,
-    'Zapisz raport', (data, form) => {
-      const name = data.get('title').trim();
-      if (!name) {
-        const input = form.elements.title;
-        input.setCustomValidity('Wpisz nazwę obowiązku.');
-        input.reportValidity();
-        input.addEventListener('input', () => input.setCustomValidity(''), {once: true});
-        return false;
-      }
-      const fields = {title: name, date: data.get('date'), status: data.get('status'), notes: data.get('notes').trim()};
-      if (report) Object.assign(report, fields);
-      else state.reports.unshift({id: crypto.randomUUID(), owner: state.member, ...fields});
-      save('Zapisano raport.');
-    });
-}
-
 content.addEventListener('click', e => {
   const button = e.target.closest('button[data-action]');
   if (!button) return;
@@ -401,7 +387,7 @@ content.addEventListener('click', e => {
     delete event.votes[state.member];
     save('Wypisano Cię z aktywności.');
   }
-  if (action === 'report') editReport(state.reports.find(item => item.id === id && item.owner === state.member));
+  if (action === 'report' || action === 'local-report' || action.startsWith('duty-')) void handleDutyAction(button);
 });
 let swipe;
 content.addEventListener('pointerdown', event => {
@@ -436,6 +422,10 @@ content.addEventListener('pointercancel', finishSwipe);
 content.addEventListener('lostpointercapture', finishSwipe);
 
 content.addEventListener('change', event => {
+  if (event.target.id === 'duty-profile') {
+    changeDutyProfile(event.target.value);
+    return;
+  }
   if (event.target.id !== 'crew-gender' || !Object.keys(genderFilters).includes(event.target.value)) return;
   if (!state.crewPreferences) state.crewPreferences = {};
   state.crewPreferences[state.member] = event.target.value;
@@ -447,7 +437,14 @@ member.addEventListener('change', () => {
   state.member = member.value;
   save();
 });
-window.addEventListener('hashchange', render);
+function refreshPage() {
+  render();
+  if (location.hash === '#raporty') void loadDuties();
+}
+window.addEventListener('hashchange', refreshPage);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && location.hash === '#raporty') void loadDuties();
+});
 window.addEventListener('storage', event => {
   if (event.key === storageKey && event.newValue) {
     state = JSON.parse(event.newValue);
@@ -460,6 +457,7 @@ const updateNetwork = () => {
 window.addEventListener('online', () => {
   updateNetwork();
   void syncWorkspace();
+  if (location.hash === '#raporty') void loadDuties();
 });
 window.addEventListener('offline', updateNetwork);
 window.addEventListener('beforeinstallprompt', event => {
@@ -474,5 +472,5 @@ window.addEventListener('beforeinstallprompt', event => {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(console.error);
 member.innerHTML = crew.map(name => `<option>${escape(name)}</option>`).join('');
 updateNetwork();
-render();
+refreshPage();
 void syncWorkspace();

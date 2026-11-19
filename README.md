@@ -16,3 +16,13 @@ Domyślna baza to `crewconnect`, a kolekcja `workspaces` powstaje przy pierwszym
 3. Uruchom workflow **Deploy CrewConnect to GitHub Pages**. Wejdź na `https://hypereg.github.io/CrewConnect/`. Bez skonfigurowanego adresu API frontend pracuje w trybie lokalnym.
 
 GitHub Pages hostuje pliki PWA. Backend łączy się z Atlas, a frontend używa prywatnego tokenu obszaru roboczego zapisanego w przeglądarce. Przeglądarka synchronizuje się z API po odzyskaniu połączenia. URI Atlas pozostaje na serwerze.
+
+## Wspólny harmonogram i raporty głosowe
+
+1. Ustaw jedno wspólne hasło `CREW_PASSWORD` i klucz `NVIDIA_API_KEY` w sekretach środowiskowych backendu.
+2. Opcjonalnie ustaw `CREW_MEMBERS` z własną listą osób, np. `[{"id":"ola","name":"Ola Nowak"},{"id":"jan","name":"Jan Kowalski"}]`. Domyślnie dostępne są trzy profile demonstracyjne. Zachowaj identyfikatory `id` przy zmianie nazw, aby zachować przypisania.
+3. Po restarcie otwórz **Raporty obowiązków**, wpisz hasło załogi i wybierz profil. Każdy, kto zna wspólne hasło, może wybrać dowolny profil.
+
+Kolekcje `crewDuties` i `crewDutyReports` MongoDB przechowują wspólny harmonogram i dziennik. Załoga widzi wszystkie wpisy i może planować przydziały. Zapis wykonania i raportu z przydziału jest dostępny po wybraniu przypisanego profilu. Raporty ze wcześniejszego obszaru roboczego są dostępne w sekcji „Raporty w tej przeglądarce”. Instalacje bez `CREW_PASSWORD` korzystają z trybu demo.
+
+Raport głosowy wymaga HTTPS lub `localhost` i dostępu do mikrofonu. Po wybraniu „Przygotuj szkic” aplikacja wysyła do [NVIDIA Parakeet RNNT Multilingual](https://build.nvidia.com/nvidia/parakeet-1_1b-rnnt-multilingual-asr/api) maksymalnie 30 sekund dźwięku. Po transkrypcji [Qwen3-Next przez NVIDIA NIM](https://docs.api.nvidia.com/nim/reference/qwen-qwen3-next-80b-a3b-instruct-infer) redaguje polski raport. Użytkownik może odsłuchać nagranie i poprawić szkic przed zapisem. CrewConnect zapisuje w MongoDB wyłącznie zatwierdzony tekst. Backend potrzebuje dostępu do `grpc.nvcf.nvidia.com:443` i `integrate.api.nvidia.com:443`.

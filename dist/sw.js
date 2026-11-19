@@ -1,5 +1,5 @@
-const cacheName = 'crewconnect-shell-v8';
-const assets = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icon.png', 'icon-large.png'];
+const cacheName = 'crewconnect-shell-v9';
+const assets = ['./', 'index.html', 'style.css?v=9', 'app.js?v=9', 'duties.js', 'voice.js', 'manifest.webmanifest', 'icon.png', 'icon-large.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(assets)).then(() => self.skipWaiting()));
 });

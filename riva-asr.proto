@@ -1,0 +1,40 @@
+// Wire-compatible subset of NVIDIA Riva's public streaming ASR protocol.
+// https://github.com/nvidia-riva/common/blob/main/riva/proto/riva_asr.proto
+syntax = "proto3";
+package nvidia.riva.asr;
+
+service RivaSpeechRecognition {
+  rpc StreamingRecognize(stream StreamingRecognizeRequest) returns (stream StreamingRecognizeResponse);
+}
+
+message RecognitionConfig {
+  int32 encoding = 1;
+  int32 sample_rate_hertz = 2;
+  string language_code = 3;
+  int32 max_alternatives = 4;
+  bool enable_automatic_punctuation = 11;
+}
+
+message StreamingRecognitionConfig {
+  RecognitionConfig config = 1;
+}
+
+message StreamingRecognizeRequest {
+  oneof streaming_request {
+    StreamingRecognitionConfig streaming_config = 1;
+    bytes audio_content = 2;
+  }
+}
+
+message StreamingRecognizeResponse {
+  repeated StreamingRecognitionResult results = 1;
+}
+
+message StreamingRecognitionResult {
+  repeated SpeechRecognitionAlternative alternatives = 1;
+  bool is_final = 2;
+}
+
+message SpeechRecognitionAlternative {
+  string transcript = 1;
+}
