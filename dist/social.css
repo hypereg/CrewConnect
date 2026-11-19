@@ -109,6 +109,7 @@ p { line-height: 1.55; }
   border-radius: 100px; background: var(--source-bg); color: var(--source-ink); font-size: .78rem; font-weight: 740;
 }
 .source-badge::before { content: ""; width: .46rem; height: .46rem; flex: none; border-radius: var(--source-shape); background: var(--source-edge); }
+.event-tags { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; }
 .event-card { display: flex; flex-direction: column; gap: .65rem; border-top: 3px solid var(--source-edge); }
 .event-card h3 { font-size: 1.33rem; letter-spacing: -.029em; }
 .event-card h3 a, .agenda-item h3 a { text-decoration: none; }
@@ -159,6 +160,15 @@ p { line-height: 1.55; }
 .button-row, .form-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .45rem; }
 form { display: grid; gap: .92rem; margin-top: .95rem; }
 form label { min-width: 0; display: grid; gap: .36rem; font-size: .93rem; font-weight: 660; }
+form .event-term { min-width: 0; margin: 0; padding: 0; border: 0; }
+.event-term legend { margin-bottom: .5rem; padding: 0; font-size: .93rem; font-weight: 700; }
+.event-term > div { display: grid; gap: .65rem; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+.meeting-location {
+  display: flex; align-items: center; justify-content: space-between; gap: .6rem; flex-wrap: wrap;
+  background: #f3f8f8; border: 1px solid var(--line); padding: .7rem; border-radius: 10px;
+}
+.meeting-location span { font-size: .93rem; font-weight: 700; }
+.meeting-location p { margin-top: .15rem; font-size: .88rem; }
 input:not([type=checkbox]), textarea, select {
   width: 100%; min-width: 0; min-height: 46px; padding: .58rem .65rem; color: var(--ink);
   background: #fff; border: 1px solid #aabdc4; border-radius: 9px; font-size: 1rem;
@@ -242,6 +252,8 @@ dialog {
 dialog::backdrop { background: #102b3bb0; }
 dialog header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
 dialog header .button { min-width: 44px; font-size: 1.3rem; }
+dialog:has(.place-picker-frame) { width: min(980px, calc(100% - 18px)); padding: .65rem; }
+.place-picker-frame { display: block; width: 100%; height: min(70dvh, 650px); border: 1px solid var(--line); border-radius: 10px; }
 .qr-print { display: grid; justify-items: center; padding: .75rem 0; text-align: center; }
 .qr-print img { display: block; width: min(100%, 250px); height: auto; image-rendering: pixelated; }
 .qr-print a { color: var(--accent); font-size: .8rem; overflow-wrap: anywhere; }
@@ -254,6 +266,7 @@ dialog header .button { min-width: 44px; font-size: 1.3rem; }
   .calendar-day { padding: 3px; }
   .calendar-event { width: 7px; height: 7px; flex: 0 0 auto; padding: 0; border-radius: 50%; background: #b42f47; color: transparent; }
   .calendar-more { line-height: 1; }
+  .form-view .form-actions .primary { width: 100%; }
   .detail-action { position: sticky; bottom: env(safe-area-inset-bottom); background: white; padding-block: .3rem; }
 }
 @media (min-width: 570px) {

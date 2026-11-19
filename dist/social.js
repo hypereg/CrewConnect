@@ -100,7 +100,8 @@ function route() {
   const hash = location.hash.slice(1);
   const [page, query = ''] = hash.split('?');
   const [section, id] = page.split('/');
-  return {page: section || 'wydarzenia', id, token: new URLSearchParams(query).get('kod')};
+  const params = new URLSearchParams(query);
+  return {page: section || 'wydarzenia', id, token: params.get('kod'), date: params.get('dzien')};
 }
 function navigate(target) {
   if (location.hash === '#' + target) render(true);
@@ -232,6 +233,15 @@ function availability(event) {
 const sourceBadge = source => '<span class="source-badge source-' + source + '">' + eventSources[source] + '</span>';
 const placeLabel = event => escape(event.place) + (event.deck ? ' · pokład ' + escape(event.deck) : '');
 
+function signupAction(event, compact = false) {
+  if (event.voyageId !== board.voyage?.id || event.status !== 'published' || isPast(event)) return '';
+  const full = event.capacity !== null && event.count >= event.capacity;
+  const label = event.joined ? 'Wypisz się' : full ? 'Brak miejsc' : 'Zapisz się';
+  const attributes = (offline || (!event.joined && full) ? 'disabled ' : '') +
+    (compact ? 'aria-label="' + label + ' — ' + escape(event.title) + '"' : '');
+  return button(label, event.joined ? 'leave' : 'join', event.id, attributes, event.joined ? 'secondary' : 'primary');
+}
+
 function eventCard(event, panel = false) {
   const group = categories.indexOf(event.category);
   return '<article class="surface event-card source-' + sourceOf(event) + '"><div class="event-card-top">' +
@@ -255,6 +265,14 @@ function eventSections(events, panel = false) {
       label + '</h2>' + (items.length ? eventGrid(items, panel) : '<p class="surface section-empty">' +
         (source === 'guest' ? 'Brak spotkań gości.' : 'Brak wydarzeń w programie.') + '</p>') + '</section>';
   }).join('');
+}
+
+function guestEventAction(date = '') {
+  if (offline || !board.access || !board.voyage || board.user.role !== 'guest') return '';
+  const own = upcoming().find(event => sourceOf(event) === 'guest' && event.ownerId === board.user.id);
+  return own ? '<a class="button secondary" href="#wydarzenie/' + escape(own.id) + '">Moje spotkanie</a>' :
+    '<a class="button primary" href="#dodaj-spotkanie' + (date ? '?dzien=' + encodeURIComponent(date) : '') + '">' +
+    icon('plus') + 'Dodaj spotkanie</a>';
 }
 
 function todayDate() {
@@ -306,7 +324,7 @@ function renderCalendar() {
 }
 
 function renderEvents() {
-  return renderHeading('Wydarzenia', 'Nadchodzące aktywności na pokładzie') + eventSections(upcoming());
+  return renderHeading('Wydarzenia', 'Nadchodzące aktywności na pokładzie', guestEventAction()) + eventSections(upcoming());
 }
 
 function renderBookings() {
@@ -325,40 +343,43 @@ function renderDetail(id) {
   const event = eventById(id);
   if (!event) return back('wydarzenia', 'Wydarzenia') + renderHeading('Wydarzenie niedostępne');
   const current = event.voyageId === board.voyage?.id;
-  const manageable = current && event.canManage && !offline && event.status !== 'cancelled';
-  const canSign = current && event.status === 'published' && !isPast(event);
-  const full = event.capacity !== null && event.count >= event.capacity;
-  const disabled = offline || (!event.joined && full) ? 'disabled' : '';
+  const guestEvent = sourceOf(event) === 'guest';
+  const manageable = current && event.canManage && !offline && event.status !== 'cancelled' && (!guestEvent || !isPast(event));
+  const signup = signupAction(event);
+  const place = event.placeId ? '<a class="text-link" href="#mapa/' + escape(event.placeId) + '">' + placeLabel(event) + '</a>' :
+    '<strong>' + placeLabel(event) + '</strong>';
   return back(event.status === 'draft' || !current ? (board.user.role === 'admin' ? 'admin' : 'planner') : 'wydarzenia', 'Wróć') +
-    '<div class="detail-view">' + card('<div class="event-card-top"><span class="event-category category-' +
-      categories.indexOf(event.category) + '">' + icon(categoryIcons[event.category]) + escape(event.category) + '</span>' +
-      eventBadge(event) + '</div>' + renderHeading(escape(event.title)) +
+    '<div class="detail-view">' + card('<div class="event-card-top"><div class="event-tags">' + sourceBadge(sourceOf(event)) +
+      '<span class="event-category category-' + categories.indexOf(event.category) + '">' + icon(categoryIcons[event.category]) +
+      escape(event.category) + '</span></div>' + eventBadge(event) + '</div>' + renderHeading(escape(event.title)) +
       '<div class="detail-facts"><div>' + icon('calendar') + '<span><strong>' + eventDate(event) + ', ' + eventTime(event) +
       '</strong><small>' + escape(board.voyage?.timeZone && current ? board.voyage.timeZone :
         board.voyages?.find(voyage => voyage.id === event.voyageId)?.timeZone) + '</small></span></div><div>' +
-      icon('pin') + '<strong>' + escape(event.place) + '</strong></div><div>' + icon('users') + '<span>' +
+      icon('pin') + place + '</div><div>' + icon('users') + '<span>' +
       '<strong>' + escape(availability(event)) + '</strong><small>Organizator: ' + escape(event.owner) + '</small></span></div></div>' +
       (event.changes.length ? '<p class="change-note">Zmieniono: ' + escape(event.changes.join(' i ')) + '</p>' : '') +
       (event.description ? '<h2>O wydarzeniu</h2><p class="event-description">' + escape(event.description) + '</p>' : '') +
-      (canSign ? '<div class="detail-action">' + button(event.joined ? 'Wypisz się' : full ? 'Brak miejsc' : 'Zapisz się',
-        event.joined ? 'leave' : 'join', event.id, disabled, event.joined ? 'secondary' : 'primary') + '</div>' : ''), 'detail-card') +
+      (signup ? '<div class="detail-action">' + signup + '</div>' : ''), 'detail-card') +
     (event.canManage && !offline ? card('<h2>Lista zapisanych</h2>' + (event.attendees?.length ?
       '<ul class="attendees">' + event.attendees.map(name => '<li>' + escape(name) + '</li>').join('') + '</ul>' : '<p>Brak zapisów.</p>') +
-      (manageable ? '<div class="button-row"><a class="button secondary" href="#edytuj/' + escape(id) + '">Edytuj</a>' +
+      (manageable ? '<div class="button-row"><a class="button secondary" href="#' + (guestEvent ? 'edytuj-spotkanie/' : 'edytuj/') +
+        escape(id) + '">Edytuj</a>' +
         (event.status === 'published' && !isPast(event) ? button('Odwołaj wydarzenie', 'cancelEvent', id, '', 'danger') : '') + '</div>' : '')) : '') +
     '</div>';
 }
+
+const categoryField = selected => '<label>Kategoria<select name="category">' + categories.map(category => '<option' +
+  (selected === category ? ' selected' : '') + '>' + category + '</option>').join('') + '</select></label>';
 
 function renderEventForm(id) {
   const event = id ? eventById(id) : null;
   const panel = board.user.role === 'admin' ? 'admin' : 'planner';
   if (offline || !board.voyage || board.user.role === 'guest' ||
-      (id && (!event?.canManage || event.voyageId !== board.voyage.id || event.status === 'cancelled'))) {
+      (id && (!event?.canManage || sourceOf(event) === 'guest' || event.voyageId !== board.voyage.id || event.status === 'cancelled'))) {
     return back(panel, 'Panel') + renderHeading('Formularz niedostępny');
   }
   const fields = field('Nazwa wydarzenia', 'title', event?.title, 'maxlength="90" required') +
-    '<label>Kategoria<select name="category">' + categories.map(category => '<option' +
-      (event?.category === category ? ' selected' : '') + '>' + category + '</option>').join('') + '</select></label>' +
+    categoryField(event?.category) +
     field('Miejsce', 'place', event?.place, 'maxlength="100" required') +
     field('Data i godzina · ' + escape(board.voyage.timeZone), 'localTime', event?.localTime, 'type="datetime-local" required') +
     field('Limit miejsc (opcjonalny)', 'capacity', event?.capacity, 'type="number" min="1" max="500" inputmode="numeric"') +
@@ -368,6 +389,36 @@ function renderEventForm(id) {
   return '<div class="form-view">' + back(id ? 'wydarzenie/' + id : panel, id ? 'Wydarzenie' : 'Panel') +
     renderHeading(id ? 'Edytuj wydarzenie' : 'Dodaj wydarzenie') +
     card(form('saveEvent', fields, actions, 'data-id="' + escape(id) + '" data-revision="' + escape(event?.revision) + '"')) + '</div>';
+}
+
+function renderGuestEventForm(id, date) {
+  const event = id ? eventById(id) : null;
+  const backLink = back(id ? 'wydarzenie/' + escape(id) : date ? 'kalendarz' : 'wydarzenia', id ? 'Spotkanie' : date ? 'Kalendarz' : 'Wydarzenia');
+  if (offline || !board.access || !board.voyage || (id ?
+    !event?.canManage || sourceOf(event) !== 'guest' || event.voyageId !== board.voyage.id ||
+      event.status !== 'published' || isPast(event) : board.user.role !== 'guest')) {
+    return backLink + renderHeading('Formularz niedostępny');
+  }
+  const own = !id && upcoming().find(item => sourceOf(item) === 'guest' && item.ownerId === board.user.id);
+  if (own) return backLink + renderHeading('Masz już nadchodzące spotkanie') +
+    '<a class="button primary" href="#wydarzenie/' + escape(own.id) + '">Otwórz moje spotkanie</a>';
+  const today = todayDate();
+  const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= today ? date : today;
+  const fields = field('Temat spotkania', 'title', event?.title, 'maxlength="90" required placeholder="Np. kawa i planszówki"') +
+    categoryField(event?.category ?? 'Integracja') +
+    '<div class="meeting-location"><div><span>Miejsce spotkania</span>' +
+    '<p id="selected-place">' + (event ? placeLabel(event) : 'Wybierz miejsce z mapy statku.') + '</p></div>' +
+    '<input type="hidden" name="placeId" value="' + escape(event?.placeId) + '">' +
+    button(icon('pin') + (event ? 'Zmień miejsce' : 'Otwórz mapę'), 'pickMeetingPlace', '',
+      'aria-haspopup="dialog" aria-describedby="selected-place"', 'secondary') + '</div>' +
+    '<fieldset class="event-term"><legend>Termin · ' + escape(board.voyage.timeZone) + '</legend><div>' +
+    field('Data', 'date', event ? eventDay(event) : selectedDate, 'type="date" required min="' + today + '"') +
+    field('Godzina', 'time', event ? eventTime(event) : '', 'type="time" required') + '</div></fieldset>' +
+    textarea('Opis (opcjonalny)', 'description', event?.description, 'maxlength="500"');
+  return '<div class="form-view">' + backLink + renderHeading(id ? 'Edytuj spotkanie' : 'Dodaj spotkanie',
+    id ? '' : 'Możesz mieć jedno nadchodzące spotkanie na tym rejsie.') +
+    card(form('saveGuestEvent', fields, submit(id ? 'Zapisz zmiany' : 'Opublikuj spotkanie'),
+      'data-id="' + escape(id) + '" data-revision="' + escape(event?.revision) + '"')) + '</div>';
 }
 
 function renderPeople() {
@@ -485,7 +536,7 @@ function renderAdmin() {
 }
 
 function render(focus = false) {
-  const {page, id} = route();
+  const {page, id, date} = route();
   if (['aktywnosci', 'raporty', 'plan-zalogi', 'dziennik-raportow', 'zaloga', 'profil'].includes(page)) {
     const target = {zaloga: 'poznaj', profil: 'konto'}[page] || 'wydarzenia';
     history.replaceState(null, '', '#' + target);
@@ -493,7 +544,7 @@ function render(focus = false) {
   }
   const user = board?.user;
   const displayNav = Boolean(user) && page !== 'rejestracja';
-  const parent = page === 'wydarzenie' ? 'wydarzenia' : page;
+  const parent = ['wydarzenie', 'dodaj-spotkanie', 'edytuj-spotkanie'].includes(page) ? 'wydarzenia' : page;
   nav.hidden = !displayNav;
   nav.innerHTML = displayNav ? '<div class="nav-group" role="group" aria-labelledby="nav-life"><p id="nav-life">Życie na pokładzie</p>' +
     links.map(([key, label]) => '<a href="#' + key + '"' +
@@ -513,19 +564,20 @@ function render(focus = false) {
   connection.textContent = offline && cachedAt ? 'Offline · dane z ' + new Date(cachedAt).toLocaleString('pl-PL', {dateStyle: 'short', timeStyle: 'short'}) : '';
   const canUseBoard = board?.access && board.voyage;
   content.classList.toggle('map-content', page === 'mapa');
-  if (page === 'mapa') renderMap();
+  if (page === 'mapa') renderMap(id);
   else if (page === 'rejestracja' || page === 'logowanie' || (!user && board)) content.innerHTML = renderLogin(page);
   else if (!board) content.innerHTML = empty('Ładujemy CrewConnect');
   else if (page === 'konto') content.innerHTML = account();
-  else if (page === 'kalendarz') content.innerHTML = renderCalendar();
   else if (page === 'admin' && user.role === 'admin') content.innerHTML = renderAdmin();
   else if (page === 'planner' && user.role === 'planner') content.innerHTML = planner();
   else if ((page === 'dodaj' || page === 'edytuj') && user.role !== 'guest') content.innerHTML = renderEventForm(id);
+  else if (page === 'dodaj-spotkanie' || page === 'edytuj-spotkanie') content.innerHTML = renderGuestEventForm(id, date);
   else if (page === 'wydarzenie' && (canUseBoard || user.role === 'admin')) content.innerHTML = renderDetail(id);
   else if (!canUseBoard) content.innerHTML = renderHeading(user.role === 'guest' ? 'Dołącz do rejsu' : 'Wydarzenia') +
     empty(user.role === 'guest' ? 'Zeskanuj kod w kabinie' : 'Brak aktywnego rejsu',
       user.role === 'guest' ? 'Zaproszenie QR przypisze Twoje konto do kabiny w bieżącym rejsie.' : '');
   else if (page === 'moje-zapisy') content.innerHTML = renderBookings();
+  else if (page === 'kalendarz') content.innerHTML = renderCalendar();
   else if (page === 'poznaj') content.innerHTML = renderPeople();
   else content.innerHTML = renderEvents();
   if (focus) {
@@ -534,9 +586,10 @@ function render(focus = false) {
   }
 }
 
-function renderMap() {
-  if (content.querySelector('.ship-map-frame')) return;
-  content.innerHTML = '<iframe class="ship-map-frame" title="Mapa statku" src="navigation.html?embed=1"></iframe>';
+function renderMap(id) {
+  const src = 'navigation.html?embed=1' + (id ? '&place=' + encodeURIComponent(id) : '');
+  if (content.querySelector('.ship-map-frame')?.getAttribute('src') === src) return;
+  content.innerHTML = '<iframe class="ship-map-frame" title="Mapa statku" src="' + escape(src) + '"></iframe>';
 }
 
 function showResult(title, body, actions = '') {
@@ -551,6 +604,28 @@ dialog.addEventListener('click', event => {
 dialog.addEventListener('close', () => {
   clearInterval(chatPoll);
   dialog.innerHTML = '';
+});
+
+function openMeetingMap(control) {
+  if (dialog.open) return;
+  const placeId = control.form.elements.placeId.value;
+  const src = 'navigation.html?embed=1&pick=1' + (placeId ? '&place=' + encodeURIComponent(placeId) : '');
+  showResult('Wybierz miejsce na statku', '<iframe class="place-picker-frame" title="Wybór miejsca na mapie" src="' + escape(src) + '"></iframe>');
+}
+
+window.addEventListener('message', event => {
+  if (!dialog.open || event.origin !== location.origin ||
+      event.source !== dialog.querySelector('.place-picker-frame')?.contentWindow) return;
+  if (event.data?.type === 'crewconnect-place-cancel') return dialog.close();
+  if (event.data?.type !== 'crewconnect-place-selected') return;
+  const place = event.data.place;
+  const form = content.querySelector('[data-form="saveGuestEvent"]');
+  if (!form || typeof place?.id !== 'string' || typeof place.name !== 'string' || !Number.isInteger(place.deck)) return;
+  form.elements.placeId.value = place.id;
+  form.querySelector('#selected-place').textContent = place.name + ' · pokład ' + place.deck;
+  form.querySelector('[data-action="pickMeetingPlace"]').innerHTML = icon('pin') + 'Zmień miejsce';
+  form.querySelector('.form-error').hidden = true;
+  dialog.close();
 });
 
 function openChat(id, newMatch = false) {
@@ -611,10 +686,10 @@ async function mutate(payload, {message, after, onError} = {}) {
   requestVersion++;
   try {
     const result = await request(payload);
-    const {print, plannerCode, plannerEmail, addedCabins, ...next} = result;
+    const {print, plannerCode, plannerEmail, addedCabins, eventId, ...next} = result;
     writeLocal(logoutKey, null);
     updateBoard(next);
-    if (after) after();
+    if (after) after(eventId);
     render();
     if (addedCabins) announce('Dodane kabiny: ' + addedCabins + '.');
     else if (message) announce(message);
@@ -641,6 +716,7 @@ content.addEventListener('submit', event => {
   if (operation) return;
   const data = Object.fromEntries(new FormData(element));
   const action = element.dataset.form;
+  const formError = element.querySelector('.form-error');
   const payload = {action, ...data};
   if (action === 'register') payload.token = route().token;
   if (action === 'addCabins') {
@@ -653,8 +729,17 @@ content.addEventListener('submit', event => {
     payload.capacity = data.capacity ? Number(data.capacity) : null;
     payload.publish = event.submitter?.value !== 'draft';
   }
+  if (action === 'saveGuestEvent') {
+    if (!data.placeId) {
+      formError.textContent = 'Wybierz miejsce z mapy statku.';
+      formError.hidden = false;
+      element.querySelector('[data-action="pickMeetingPlace"]').focus();
+      return;
+    }
+    Object.assign(payload, {id: element.dataset.id, revision: Number(element.dataset.revision),
+      localTime: data.date + 'T' + data.time});
+  }
   if (action === 'profile') payload.visible = data.visible === 'on';
-  const formError = element.querySelector('.form-error');
   const buttons = [...element.querySelectorAll('button[type=submit]')];
   buttons.forEach(control => { control.disabled = true; });
   formError.hidden = true;
@@ -662,10 +747,12 @@ content.addEventListener('submit', event => {
     login: () => navigate(route().token && board.user?.role === 'guest' && !board.user.cabin ?
       'rejestracja?kod=' + encodeURIComponent(route().token) : 'wydarzenia'),
     register: () => navigate('wydarzenia'),
-    saveEvent: () => navigate(board.user.role === 'admin' ? 'admin' : 'planner')
+    saveEvent: () => navigate(board.user.role === 'admin' ? 'admin' : 'planner'),
+    saveGuestEvent: id => navigate('wydarzenie/' + id)
   }[action];
   const messages = {createVoyage: 'Utworzono rejs.', profile: 'Zapisano profil.',
-    saveEvent: payload.publish ? 'Zapisano opublikowane wydarzenie.' : 'Zapisano szkic.'};
+    saveEvent: payload.publish ? 'Zapisano opublikowane wydarzenie.' : 'Zapisano szkic.',
+    saveGuestEvent: payload.id ? 'Zapisano zmiany w spotkaniu.' : 'Opublikowano spotkanie.'};
   void mutate(payload, {after, message: messages[action], onError: message => {
     formError.textContent = message;
     formError.hidden = false;
@@ -712,6 +799,7 @@ content.addEventListener('click', event => {
   }
   if (action === 'logout') return void logout();
   if (offline) return;
+  if (action === 'pickMeetingPlace') return openMeetingMap(control);
   if (action === 'chat') return openChat(id);
   const confirms = {
     resetMatches: 'Usunąć wszystkie Twoje polubienia, pominięcia i dopasowania? Wiadomości zostaną zachowane.',
