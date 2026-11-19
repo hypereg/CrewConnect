@@ -18,7 +18,8 @@ const crewProfiles = [
   {name: 'Michał Dąbrowski', gender: 'men', role: 'Mechanik wachtowy', initials: 'MD', color: 'plum',
     bio: 'Najchętniej spędzam wolny wieczór przy grze kooperacyjnej.', interests: ['Gry kooperacyjne', 'Łamigłówki']},
   {name: 'Zofia Król', gender: 'women', role: 'Kadetka pokładowa', initials: 'ZK', color: 'teal',
-    bio: 'Uczę się hiszpańskiego i chętnie poćwiczę konwersację przy herbacie.', interests: ['Hiszpański', 'Herbata']}
+    bio: 'Uczę się hiszpańskiego i chętnie poćwiczę konwersację przy herbacie.', interests: ['Hiszpański', 'Herbata']},
+  ...addedCrewProfiles
 ];
 const crew = crewProfiles.map(profile => profile.name);
 const genderFilters = {all: 'Wszystkich', women: 'Kobiety', men: 'Mężczyzn'};
