@@ -17,6 +17,18 @@ function database() {
   return connecting.then(client => client.db(MONGODB_DATABASE));
 }
 
+export async function crewAdminDigest(db) {
+  if (!db && !MONGODB_URI) return null;
+  const directory = db ?? await database();
+  const record = await directory.collection('crewAdminConfig').findOne({_id: 'access'}, {projection: {digest: 1}});
+  return /^[a-f0-9]{64}$/.test(record?.digest ?? '') ? Buffer.from(record.digest, 'hex') : null;
+}
+
+export function matchesCrewAdminKey(access, digest) {
+  return Boolean(digest && typeof access === 'string' && /^[a-f0-9]{64}$/.test(access) &&
+    timingSafeEqual(hash(access), digest));
+}
+
 async function input(req) {
   if (req.body !== undefined) return typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
   let raw = '';
@@ -33,9 +45,7 @@ export default async function users(req, res) {
     const access = req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
     if (!access) return send(res, 401, {error: 'Wpisz klucz administratora.'});
     const db = await database();
-    const config = await db.collection('crewAdminConfig').findOne({_id: 'access'});
-    if (!/^[a-f0-9]{64}$/.test(config?.digest ?? '') ||
-        !timingSafeEqual(hash(access), Buffer.from(config.digest, 'hex'))) {
+    if (!matchesCrewAdminKey(access, await crewAdminDigest(db))) {
       return send(res, 401, {error: 'Nieprawidłowy klucz administratora.'});
     }
     const workspaces = db.collection('workspaces');
