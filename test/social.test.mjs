@@ -60,6 +60,14 @@ test('shared cruise workflow enforces cabin capacity, event limits and role owne
   assert.equal((await register(guestA, firstToken, 'Ala')).user.cabin, '101');
   await register(extra, firstToken, 'Ala', 409);
   assert.equal((await extra()).user, null);
+  const otherCabin = added.cabins.find(item => item.label === 'A12');
+  const {print: otherInvite} = await admin('issueQr', {id: otherCabin.id});
+  const otherToken = invite(otherInvite.url);
+  await register(guestA, otherToken, 'Ala', 409);
+  assert.equal((await guestA()).user.cabin, '101');
+  for (const name of ['Iza', 'Jan']) {
+    assert.equal((await register(client(), otherToken, name)).user.cabin, 'A12');
+  }
   const {print: renewed} = await admin('issueQr', {id: cabin.id});
   await guestB('?invite=' + firstToken, undefined, 404);
   const renewedToken = invite(renewed.url);
