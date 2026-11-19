@@ -12,7 +12,7 @@ function workspaceCollection() {
   return client.db(MONGODB_DATABASE).collection('workspaces');
 }
 
-function validProfile(profile) {
+export function validProfile(profile) {
   return profile && typeof profile.id === 'string' &&
     /^profile-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(profile.id) &&
     typeof profile.name === 'string' && profile.name.trim().length > 0 && profile.name.length <= 80 &&

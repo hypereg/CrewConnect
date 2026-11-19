@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import events from './api/events.mjs';
+import connections from './api/connections.mjs';
 import workspace from './api/workspace.mjs';
 import { handleDutyRequest, isDutyRoute } from './duty-http.mjs';
 
@@ -23,6 +24,7 @@ createServer(async (req, res) => {
   const path = req.url.split('?')[0];
   try {
     if (path === '/api/events') return await events(req, res);
+    if (path === '/api/connections') return await connections(req, res);
     if (path === '/api/workspace') return await workspace(req, res);
     if (isDutyRoute(path)) return await handleDutyRequest(path, req, res);
     const asset = assets.get(path);
