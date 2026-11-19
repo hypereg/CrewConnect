@@ -29,8 +29,8 @@ function demoSchedule() {
     {id: 'demo-night', kind: 'Warta', title: 'Warta nocna', assignee: crew[2], starts: dateValue() + 'T22:00', ends: dateValue(1) + 'T02:00'}
   ];
   return {
-    user: {id: state.member, name: state.member},
-    members: crew.map(name => ({id: name, name})),
+    user: {id: state.member, name: displayName(state.member)},
+    members: currentRoster().map(profile => ({id: profileId(profile), name: profile.name})),
     duties: state.duties, reports: state.reports, voiceEnabled: demoVoiceEnabled
   };
 }
@@ -134,7 +134,7 @@ function signOutDuty() {
 }
 
 function changeDutyProfile(id) {
-  if (!hostedDuties && crew.includes(id)) {
+  if (!hostedDuties && isWorkspaceMember(id)) {
     state.member = id;
     save();
     content.querySelector('#duty-profile')?.focus();
@@ -236,7 +236,7 @@ function localDutyHistory() {
   if (!hostedDuties) return '';
   return dutyDisclosure('browser-reports', 'Raporty w tej przeglądarce', state.reports.length,
     `<div class="duty-report-list">${state.reports.map(report =>
-      reportCard(report, escape(report.owner), report.owner === state.member, true)
+      reportCard(report, escape(displayName(report.owner)), report.owner === state.member, true)
     ).join('')}</div>`);
 }
 

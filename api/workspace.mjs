@@ -12,6 +12,17 @@ function workspaceCollection() {
   return client.db(MONGODB_DATABASE).collection('workspaces');
 }
 
+function validProfile(profile) {
+  return profile && typeof profile.id === 'string' &&
+    /^profile-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(profile.id) &&
+    typeof profile.name === 'string' && profile.name.trim().length > 0 && profile.name.length <= 80 &&
+    !/\p{Cc}/u.test(profile.name) &&
+    typeof profile.role === 'string' && profile.role.length <= 60 &&
+    typeof profile.bio === 'string' && profile.bio.length <= 300 &&
+    Array.isArray(profile.interests) && profile.interests.length <= 6 &&
+    profile.interests.every(interest => typeof interest === 'string' && interest.trim() && interest.length <= 28);
+}
+
 export default async function workspace(req, res) {
   try {
     const browserOrigin = req.headers.origin;
@@ -59,7 +70,8 @@ export default async function workspace(req, res) {
     } else if (Buffer.byteLength(JSON.stringify(snapshot)) > 512 * 1024) {
       return res.writeHead(413).end();
     }
-    if (!snapshot || typeof snapshot.member !== 'string' || !Array.isArray(snapshot.events) || !Array.isArray(snapshot.reports)) {
+    if (!snapshot || typeof snapshot.member !== 'string' || !Array.isArray(snapshot.events) || !Array.isArray(snapshot.reports) ||
+        (snapshot.userProfile !== undefined && !validProfile(snapshot.userProfile))) {
       return res.writeHead(400).end();
     }
     await workspaceCollection().updateOne(

@@ -58,7 +58,9 @@ async function updateSharedEvent(payload, success) {
     announce('Nie udało się zapisać na tablicy załogi. Spróbuj ponownie po odzyskaniu połączenia.');
   }
 }
-const publishEvent = event => updateSharedEvent({...event, capacity: event.capacity ?? 30, action: 'publish'}, 'Wydarzenie jest widoczne na tablicy załogi.');
+const publishEvent = event => updateSharedEvent({
+  ...event, capacity: event.capacity ?? 30, action: 'publish', displayName: personalName(event.owner)
+}, 'Wydarzenie jest widoczne na tablicy załogi.');
 const pendingKey = 'crewconnect-workspace-pending';
 const apiBase = document.querySelector('meta[name="crewconnect-api"]')?.content;
 const workspaceUrl = apiBase ? new URL('/api/workspace', apiBase).href : 'api/workspace';
@@ -126,11 +128,35 @@ let state = JSON.parse(localStorage.getItem(storageKey) || 'null') || initial;
 const content = document.querySelector('#content');
 const dialog = document.querySelector('#dialog');
 const member = document.querySelector('#crew');
+const personalOption = document.createElement('option');
 const notice = document.querySelector('#notice');
 let noticeTimer;
 const escape = value => String(value).replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 }[char]));
+const profileId = profile => profile.id ?? profile.name;
+const isWorkspaceMember = id => crew.includes(id) || (typeof id === 'string' && id === state.userProfile?.id);
+const initials = name => name.split(/\s+/u).slice(0, 2).map(part => [...part][0]).join('').toLocaleUpperCase('pl');
+const personalName = id => state.userProfile?.id === id ? state.userProfile?.name : undefined;
+const displayName = (id, names) => personalName(id) ?? (names && Object.hasOwn(names, id) ? names[id] : id);
+
+function currentRoster() {
+  const profile = state.userProfile;
+  return profile ? [{...profile, color: 'teal', initials: initials(profile.name)}, ...crewProfiles] : crewProfiles;
+}
+
+function renderMemberSelector() {
+  const profile = state.userProfile;
+  if (profile) {
+    personalOption.value = profile.id;
+    personalOption.textContent = profile.name;
+    if (!personalOption.isConnected) member.prepend(personalOption);
+  } else {
+    personalOption.remove();
+  }
+  member.value = state.member;
+}
+
 const formatDate = value => new Intl.DateTimeFormat('pl-PL', {
   weekday: 'short', day: 'numeric', month: 'short',
   ...(value.includes('T') ? {hour: '2-digit', minute: '2-digit'} : {})
@@ -175,7 +201,7 @@ function renderCalendar() {
   }).join('');
   const agenda = eventsOn(selectedDay).map(({event, slot}) => `
     <article class="agenda-item"><time datetime="${slot}">${slot.slice(11, 16)}</time>
-      <div><h3>${escape(event.title)}</h3><p class="muted">${escape(event.type)} · ${escape(event.owner)}</p></div>
+      <div><h3>${escape(event.title)}</h3><p class="muted">${escape(event.type)} · ${escape(displayName(event.owner, event.memberNames))}</p></div>
       ${signupButton(event, 'secondary')}
     </article>`).join('');
   return `<section class="calendar" aria-labelledby="calendar-title">
@@ -206,40 +232,59 @@ function eventCard(event) {
   return `<article class="card">
     <span class="badge">${escape(event.type)}</span>
     <h3>${escape(event.title)}</h3>
-    <p class="muted">Organizuje ${escape(event.owner)}</p>
+    <p class="muted">Organizuje ${escape(displayName(event.owner, event.memberNames))}</p>
     ${event.description ? `<p>${escape(event.description)}</p>` : ''}
     <p class="note"><strong>${summary}</strong></p>
-    <p class="muted">${people.length}${event.capacity ? ' / ' + event.capacity : ''} zapisanych${people.length ? ' · ' + escape(people.join(', ')) : ''}</p>
+    <p class="muted">${people.length}${event.capacity ? ' / ' + event.capacity : ''} zapisanych${people.length ? ' · ' + escape(people.map(id => displayName(id, event.memberNames)).join(', ')) : ''}</p>
     <footer>${signupButton(event, 'primary')}
     ${isShared(event) ? '<span class="badge">Tablica załogi</span>' : eventsAvailable && event.id !== 'fifa' && event.owner === state.member ? `<button class="secondary" data-action="publish" data-id="${event.id}">Opublikuj dla załogi</button>` : ''}
     ${event.votes[state.member] && event.owner !== state.member ? `<button class="secondary" data-action="leave" data-id="${event.id}">Wypisz się</button>` : ''}</footer>
   </article>`;
 }
 
-function renderCrew() {
-  const choices = state.crewChoices?.[state.member] ?? {};
-  const others = crewProfiles.filter(profile => profile.name !== state.member);
-  const matches = others.filter(profile => choices[profile.name] === 'connect' &&
-    state.crewChoices?.[profile.name]?.[state.member] === 'connect');
-  const visibleProfiles = others.filter(matchesPreference);
-  const candidate = visibleProfiles.find(profile => !choices[profile.name]);
-  const card = candidate ? `
-    <article class="crew-card" id="crew-card" data-profile="${escape(candidate.name)}">
-      <div class="crew-portrait ${candidate.color}"><span aria-hidden="true">${candidate.initials}</span></div>
+function profileDetails(profile) {
+  return `<h2>${escape(profile.name)}</h2>
+    ${profile.role ? `<p class="muted">${escape(profile.role)}</p>` : ''}
+    ${profile.bio ? `<p class="profile-bio">${escape(profile.bio)}</p>` : ''}
+    ${profile.interests.length ? `<div class="crew-interests">${profile.interests.map(interest => `<span>${escape(interest)}</span>`).join('')}</div>` : ''}`;
+}
+
+function renderUserProfile() {
+  const profile = state.userProfile;
+  const selected = profile && state.member === profile.id;
+  return `<header class="crew-heading"><h1>Mój profil</h1></header>
+    <article class="card profile-card">
+      <div class="crew-portrait teal"><span aria-hidden="true">${profile ? escape(initials(profile.name)) : '◇'}</span></div>
       <div class="crew-details">
-        <h2>${escape(candidate.name)}</h2>
-        <p class="muted">${escape(candidate.role)}</p>
-        <p>${escape(candidate.bio)}</p>
-        <div class="crew-interests">${candidate.interests.map(interest => `<span>${escape(interest)}</span>`).join('')}</div>
+        ${profile ? profileDetails(profile) : '<h2>Przedstaw się załodze</h2><p class="muted">Wybierz nazwę i dodaj kilka słów o sobie.</p>'}
+        <footer>
+          <button class="primary" data-action="profile-edit">${profile ? 'Edytuj profil' : 'Utwórz profil'}</button>
+          ${profile && !selected ? '<button class="secondary" data-action="profile-use">Użyj tego profilu</button>' : ''}
+        </footer>
       </div>
     </article>
+    <p class="muted profile-note">Profil jest przypisany do tej przeglądarki. Na wspólnej tablicy załoga widzi Twoją nazwę przy aktywnościach.</p>`;
+}
+
+function renderCrew() {
+  const choices = state.crewChoices?.[state.member] ?? {};
+  const others = currentRoster().filter(profile => profileId(profile) !== state.member);
+  const matches = others.filter(profile => choices[profileId(profile)] === 'connect' &&
+    state.crewChoices?.[profileId(profile)]?.[state.member] === 'connect');
+  const visibleProfiles = others.filter(matchesPreference);
+  const candidate = visibleProfiles.find(profile => !choices[profileId(profile)]);
+  const card = candidate ? `
+    <article class="crew-card" id="crew-card" data-profile="${escape(profileId(candidate))}">
+      <div class="crew-portrait ${candidate.color}"><span aria-hidden="true">${escape(candidate.initials)}</span></div>
+      <div class="crew-details">${profileDetails(candidate)}</div>
+    </article>
     <div class="crew-actions">
-      <button class="secondary" data-action="crew-skip" data-profile="${escape(candidate.name)}">Pomiń</button>
-      <button class="primary" data-action="crew-connect" data-profile="${escape(candidate.name)}">Chcę poznać</button>
+      <button class="secondary" data-action="crew-skip" data-profile="${escape(profileId(candidate))}">Pomiń</button>
+      <button class="primary" data-action="crew-connect" data-profile="${escape(profileId(candidate))}">Chcę poznać</button>
     </div>
     <p class="crew-hint muted">Przesuń kartę w lewo, aby pominąć, lub w prawo, aby poznać.</p>` : `
     <div class="card crew-empty"><h2>Brak nowych kart w tym widoku</h2>
-    ${visibleProfiles.some(profile => choices[profile.name] === 'skip') ? '<button class="secondary" data-action="crew-revisit">Pokaż pominięte osoby</button>' : ''}</div>`;
+    ${visibleProfiles.some(profile => choices[profileId(profile)] === 'skip') ? '<button class="secondary" data-action="crew-revisit">Pokaż pominięte osoby</button>' : ''}</div>`;
   return `<header class="crew-heading"><h1>Poznaj załogę</h1><p class="muted">Znajdź osoby, z którymi chcesz spędzić czas po wachcie.</p></header>
     <div class="crew-filter"><label for="crew-gender">Kogo chcesz poznawać?</label>
       <select id="crew-gender">${Object.entries(genderFilters).map(([value, label]) =>
@@ -248,21 +293,21 @@ function renderCrew() {
     <div class="crew-layout"><section aria-label="Profile załogi">${card}</section>
       <aside class="card crew-matches"><h2>Dopasowania</h2>
         ${matches.length ? matches.map(profile => `<div class="crew-match">
-          <span class="crew-avatar ${profile.color}" aria-hidden="true">${profile.initials}</span>
-          <div><strong>${escape(profile.name)}</strong><p class="muted">${escape(profile.role)}</p></div>
+          <span class="crew-avatar ${profile.color}" aria-hidden="true">${escape(profile.initials)}</span>
+          <div><strong>${escape(profile.name)}</strong>${profile.role ? `<p class="muted">${escape(profile.role)}</p>` : ''}</div>
         </div>`).join('') : '<p class="muted">Dopasowanie pojawi się, gdy obie osoby wybiorą „Chcę poznać”.</p>'}
       </aside></div>`;
 }
 
 function chooseCrewProfile(profile, choice) {
-  if (!crew.includes(profile) || profile === state.member) return;
+  if (profile === state.member || !isWorkspaceMember(profile)) return;
   if (!state.crewChoices) state.crewChoices = {};
   if (!state.crewChoices[state.member]) state.crewChoices[state.member] = {};
   const choices = state.crewChoices[state.member];
   if (choices[profile]) return;
   choices[profile] = choice;
   const matched = choice === 'connect' && state.crewChoices[profile]?.[state.member] === 'connect';
-  save(matched ? 'Nowe dopasowanie: ' + profile : choice === 'connect' ? 'Zapisano zainteresowanie.' : 'Pominięto profil.');
+  save(matched ? 'Nowe dopasowanie: ' + displayName(profile) : choice === 'connect' ? 'Zapisano zainteresowanie.' : 'Pominięto profil.');
   (content.querySelector('[data-action="crew-skip"], [data-action="crew-revisit"]') || content.querySelector('h1'))?.focus();
 }
 
@@ -270,15 +315,18 @@ function render() {
   const page = location.hash.slice(1);
   const reports = isDutyPage(page);
   document.body.classList.toggle('on-duties', reports);
-  updateNetwork();
   const calendar = page === 'kalendarz';
   const discover = page === 'zaloga';
+  const profile = page === 'profil';
   document.querySelectorAll('[data-page]').forEach(link => {
-    if (link.dataset.page === (calendar || reports || discover ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
+    if (link.dataset.page === (calendar || reports || discover || profile ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
-  member.value = state.member;
-  if (discover) {
+  renderMemberSelector();
+  updateNetwork();
+  if (profile) {
+    content.innerHTML = renderUserProfile();
+  } else if (discover) {
     content.innerHTML = renderCrew();
     content.querySelector('h1').tabIndex = -1;
   } else if (calendar) {
@@ -330,6 +378,37 @@ function openForm(name, fields, submitLabel, onSubmit) {
     }
   };
   dialog.showModal();
+}
+
+function editUserProfile() {
+  const profile = state.userProfile;
+  openForm(profile ? 'Edytuj profil' : 'Utwórz profil', `
+    <label>Nazwa wyświetlana <input name="displayName" required maxlength="80" autocomplete="nickname" value="${escape(profile?.name ?? '')}" autofocus></label>
+    <label>Rola na pokładzie <input name="role" maxlength="60" value="${escape(profile?.role ?? '')}"></label>
+    <label>O mnie <textarea name="bio" rows="3" maxlength="300">${escape(profile?.bio ?? '')}</textarea></label>
+    <label>Zainteresowania <input name="interests" maxlength="180" aria-describedby="interests-hint" value="${escape(profile?.interests.join(', ') ?? '')}"></label>
+    <small id="interests-hint" class="muted">Do 6 zainteresowań oddzielonych przecinkami.</small>`, 'Zapisz profil', (data, form) => {
+    const name = data.get('displayName').trim().replace(/\s+/gu, ' ');
+    const role = data.get('role').trim();
+    const bio = data.get('bio').trim();
+    const interests = [...new Set(data.get('interests').split(',').map(interest => interest.trim()).filter(Boolean))];
+    if (!name || /\p{Cc}/u.test(name)) {
+      form.elements.displayName.focus();
+      throw new Error('Wpisz nazwę wyświetlaną.');
+    }
+    if (interests.length > 6 || interests.some(interest => interest.length > 28)) {
+      form.elements.interests.focus();
+      throw new Error('Wpisz do 6 zainteresowań, każde po maksymalnie 28 znaków.');
+    }
+    const existing = state.userProfile;
+    const id = existing?.id ?? 'profile-' + crypto.randomUUID();
+    state.userProfile = {id, name, role, bio, interests};
+    if (!existing) state.member = id;
+    save('Zapisano profil.');
+  });
+  dialog.addEventListener('close', () => {
+    content.querySelector('[data-action="profile-edit"]')?.focus();
+  }, {once: true});
 }
 
 function createEvent(day) {
@@ -386,7 +465,9 @@ function vote(event) {
       return false;
     }
     if (isShared(currentEvent)) {
-      void updateSharedEvent({action: 'vote', id: event.id, member: state.member, vote: selected}, 'Zapisano dostępność.');
+      void updateSharedEvent({
+        action: 'vote', id: event.id, member: state.member, vote: selected, displayName: personalName(state.member)
+      }, 'Zapisano dostępność.');
       return;
     }
     currentEvent.votes[state.member] = selected;
@@ -398,14 +479,25 @@ content.addEventListener('click', e => {
   const button = e.target.closest('button[data-action]');
   if (!button) return;
   const {action, id} = button.dataset;
+  if (action === 'profile-edit') {
+    editUserProfile();
+    return;
+  }
+  if (action === 'profile-use' && state.userProfile) {
+    state.member = state.userProfile.id;
+    save('Wybrano Twój profil.');
+    content.querySelector('[data-action="profile-edit"]')?.focus();
+    return;
+  }
   if (action === 'crew-skip' || action === 'crew-connect') {
     chooseCrewProfile(button.dataset.profile, action === 'crew-connect' ? 'connect' : 'skip');
     return;
   }
   if (action === 'crew-revisit') {
     const choices = state.crewChoices[state.member];
-    for (const profile of crewProfiles.filter(matchesPreference)) {
-      if (choices[profile.name] === 'skip') delete choices[profile.name];
+    for (const profile of currentRoster().filter(matchesPreference)) {
+      const key = profileId(profile);
+      if (choices[key] === 'skip') delete choices[key];
     }
     save('Ponownie wyświetlono pominięte profile.');
     content.querySelector('[data-action="crew-skip"]')?.focus();
@@ -514,9 +606,9 @@ window.addEventListener('storage', event => {
   }
 });
 const updateNetwork = () => {
-  const demo = !isDutyPage() || !hostedDuties;
-  document.querySelector('#network').textContent = demo ? (navigator.onLine ? 'Tryb demo' : 'Demo · offline') :
-    (navigator.onLine ? 'Online' : 'Offline');
+  const connectedProfile = isDutyPage() ? hostedDuties : state.userProfile?.id === state.member;
+  document.querySelector('#network').textContent = connectedProfile ? (navigator.onLine ? 'Online' : 'Offline') :
+    (navigator.onLine ? 'Tryb demo' : 'Demo · offline');
 };
 window.addEventListener('online', () => {
   updateNetwork();
