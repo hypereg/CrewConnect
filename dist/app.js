@@ -982,3 +982,25 @@ window.addEventListener('online', refreshDiscovery);
 setInterval(() => { if (!document.hidden) void refreshDiscovery(); }, 3000);
 window.addEventListener('online', refreshEvents);
 setInterval(() => { if (!document.hidden) void refreshEvents(); }, 15000);
+
+const mobileMenu = document.querySelector('.mobile-menu-toggle');
+const navigation = document.querySelector('#mobile-navigation');
+if (mobileMenu && navigation) {
+  function setMenu(open) {
+    mobileMenu.setAttribute('aria-expanded', String(open));
+  }
+  mobileMenu.addEventListener('click', () => setMenu(mobileMenu.getAttribute('aria-expanded') !== 'true'));
+  navigation.addEventListener('click', event => {
+    if (mobileMenu.getAttribute('aria-expanded') === 'true' && event.target.closest('a[href^="#"]')) {
+      setMenu(false);
+      mobileMenu.focus({preventScroll: true});
+    }
+  });
+  window.addEventListener('hashchange', () => setMenu(false));
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !dialog.open && mobileMenu.getAttribute('aria-expanded') === 'true') {
+      setMenu(false);
+      mobileMenu.focus();
+    }
+  });
+}
