@@ -14,9 +14,10 @@ Lokalnie serwer bez MongoDB współdzieli dane między przeglądarkami do czasu 
 
 ### Wdrożenie demo
 
-- Na Vercel lub serwerze Node pod HTTPS skonfiguruj `SOCIAL_MONGODB_URI` (lub `MONGODB_URI`), `DEMO_ADMIN_EMAIL`, indywidualny `DEMO_ADMIN_CODE` (min. 12 znaków) i losowy `DEMO_SESSION_SECRET` (min. 32 znaki). Ustaw `NODE_ENV=production` przy wdrożeniu Node. Dane demo trafiają do osobnej bazy `SOCIAL_MONGODB_DATABASE`, domyślnie `crewconnect_social_demo`.
+- Na Vercel lub serwerze Node pod HTTPS skonfiguruj `SOCIAL_MONGODB_URI` lub `MONGODB_URI`. Ustaw `NODE_ENV=production` przy wdrożeniu Node. Dane demo trafiają do osobnej bazy `SOCIAL_MONGODB_DATABASE`, domyślnie `crewconnect_social_demo`.
+- Jeśli działa już panel administracji CrewConnect, zaloguj się do wydarzeń jako `admin@example.test` i wpisz istniejący klucz administratora w polu kodu. Osobne logowanie można skonfigurować przez `DEMO_ADMIN_EMAIL` i `DEMO_ADMIN_CODE` (min. 12 znaków). Wspólny klucz sesji powstaje w MongoDB lub pochodzi z `DEMO_SESSION_SECRET` (min. 32 znaki).
 - Użyj danych testowych. W demie kod jest widoczny w przeglądarce, która o niego poprosiła. Wysyłka e-maili jest symulowana. Admin i plannerzy logują się własnymi kodami dostępu.
-- Hosting bez ustawień demo udostępnia poprzedni prototyp. Po ustawieniu zmiennych ekranem startowym stają się nowe wydarzenia.
+- Hosting udostępnia nowe wydarzenia, gdy ma bazę i skonfigurowane logowanie administratora. Przy braku konfiguracji otwiera poprzedni prototyp.
 - Uruchamiaj PWA i API z jednej domeny. Ustaw repozytoryjną zmienną `CREWCONNECT_API_URL` na adres wdrożonego demo, aby GitHub Pages kierował na tę domenę. Workflow zachowuje dotychczasową publikację, gdy zmienna jest pusta.
 - Zestaw testów uruchamia polecenie `npm test`.
 

@@ -2,6 +2,7 @@ import { createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from 
 import qrFactory from 'qrcode-generator';
 import { createSocialStore } from '../social-store.mjs';
 import { sharedPlaces } from './places.mjs';
+import { crewAdminDigest, matchesCrewAdminKey } from './users.mjs';
 
 const env = process.env;
 const hosted = env.NODE_ENV === 'production' || Boolean(env.VERCEL);
@@ -9,7 +10,9 @@ const mongoUri = env.SOCIAL_MONGODB_URI || env.MONGODB_URI;
 const dbName = env.SOCIAL_MONGODB_DATABASE || (env.MONGODB_DATABASE || 'crewconnect') + '_social_demo';
 const adminEmail = (env.DEMO_ADMIN_EMAIL || 'admin@example.test').trim().toLowerCase();
 const adminCode = env.DEMO_ADMIN_CODE || (hosted ? '' : '12345');
-const secret = env.DEMO_SESSION_SECRET || randomBytes(32);
+const configuredAdmin = !hosted || (Boolean(env.DEMO_ADMIN_EMAIL?.trim()) && adminCode.length >= 12);
+let secret = hosted ? (env.DEMO_SESSION_SECRET?.length >= 32 ? env.DEMO_SESSION_SECRET : null) :
+  env.DEMO_SESSION_SECRET || randomBytes(32);
 const cookieName = 'crew_social_session';
 const loginCookieName = 'crew_social_login';
 const loginCodeSeconds = 600;
@@ -232,10 +235,11 @@ function verifyGuestCode(state, address, browser, code) {
   return user.id;
 }
 
-async function login(req, state, body) {
+async function login(req, state, body, existingAdminDigest) {
   const address = email(body.email);
   const user = accountByEmail(state, address);
-  if (user?.active && user.role === 'admin' && equal(body.code, adminCode)) return user.id;
+  if (user?.active && user.role === 'admin' && (configuredAdmin ? equal(body.code, adminCode) :
+    matchesCrewAdminKey(body.code, existingAdminDigest))) return user.id;
   if (user?.active && user.role === 'planner' &&
       equal(digest('planner:' + text(body.code, 100, 'Kod')), user.code)) return user.id;
   const token = loginBrowser(req);
@@ -473,10 +477,11 @@ export default async function social(req, res) {
   const send = (status, value) => res.writeHead(status, {'Content-Type': 'application/json; charset=utf-8'}).end(JSON.stringify(value));
   res.setHeader('Cache-Control', 'no-store');
   try {
-    if (dbName === (env.MONGODB_DATABASE || 'crewconnect') || (hosted &&
-        (!mongoUri || !env.DEMO_SESSION_SECRET || env.DEMO_SESSION_SECRET.length < 32 || adminCode.length < 12 || !env.DEMO_ADMIN_EMAIL))) {
+    const existingAdminDigest = hosted && mongoUri && !configuredAdmin ? await crewAdminDigest() : null;
+    if (dbName === (env.MONGODB_DATABASE || 'crewconnect') || (hosted && (!mongoUri || (!configuredAdmin && !existingAdminDigest)))) {
       return send(503, {error: 'Wspólne demo wymaga konfiguracji serwera.', code: 'DEMO_NOT_CONFIGURED'});
     }
+    secret ??= await store.sessionSecret();
     if (req.method === 'GET') {
       const params = new URL(req.url, 'http://localhost').searchParams;
       const token = params.get('invite');
@@ -514,7 +519,7 @@ export default async function social(req, res) {
     }
     if (['login', 'register', 'joinDemoCabin'].includes(body?.action)) {
       const assign = body.action === 'register' ? register : joinDemoCabin;
-      const id = body.action === 'login' ? await login(req, await store.read(), body) :
+      const id = body.action === 'login' ? await login(req, await store.read(), body, existingAdminDigest) :
         await store.change(state => assign(state, body, session(req, state)));
       const state = await store.read();
       const account = id === admin.id ? admin : state.accounts.find(item => item.id === id && item.active);

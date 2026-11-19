@@ -1,10 +1,33 @@
+import { randomBytes } from 'node:crypto';
 import { MongoClient } from 'mongodb';
 
 export function createSocialStore(uri, database) {
-  const collection = uri && new MongoClient(uri, {serverSelectionTimeoutMS: 5000, maxPoolSize: 5})
-    .db(database).collection('demoState');
+  const db = uri && new MongoClient(uri, {serverSelectionTimeoutMS: 5000, maxPoolSize: 5}).db(database);
+  const collection = db && db.collection('demoState');
   const initial = {_id: 'social', revision: 0, voyages: [], cabins: [], accounts: [], events: [], choices: []};
   let memory = initial;
+  let signingKey;
+
+  function sessionSecret() {
+    signingKey ??= (async () => {
+      const settings = db.collection('socialSettings');
+      const filter = {_id: 'session'};
+      let record;
+      try {
+        record = await settings.findOneAndUpdate(filter, {$setOnInsert: {key: randomBytes(32).toString('hex')}},
+          {upsert: true, returnDocument: 'after', projection: {key: 1}});
+      } catch (error) {
+        if (error.code !== 11000) throw error;
+        record = await settings.findOne(filter, {projection: {key: 1}});
+      }
+      if (!/^[a-f0-9]{64}$/.test(record?.key ?? '')) throw new Error('Invalid social session secret.');
+      return Buffer.from(record.key, 'hex');
+    })().catch(error => {
+      signingKey = undefined;
+      throw error;
+    });
+    return signingKey;
+  }
 
   async function read() {
     if (!collection) return structuredClone(memory);
@@ -34,5 +57,5 @@ export function createSocialStore(uri, database) {
     throw Object.assign(new Error('Dane się zmieniły. Spróbuj ponownie.'), {status: 409});
   }
 
-  return {read, change};
+  return {read, change, sessionSecret};
 }
