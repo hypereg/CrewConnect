@@ -67,20 +67,23 @@ export default async function restaurants(req, res) {
     const db = await database();
     const catalog = db.collection('restaurants');
     const bookings = db.collection('restaurantBookings');
+    const coupons = db.collection('restaurantCoupons');
     const reviews = db.collection('restaurantReviews');
     const user = session && await db.collection('workspaces').findOne(
       {_id:session, archived:{$ne:true}, 'snapshot.userProfile.id':{$exists:true}}, {projection:{'snapshot.userProfile.name':1}});
     if (req.method === 'GET') {
-      const [custom, reservations, ratings, ownReviews] = await Promise.all([
+      const [custom, reservations, ratings, ownReviews, ownCoupons] = await Promise.all([
         catalog.find({}, {projection:{_id:0,owner:0}}).sort({name:1}).toArray(),
         user ? bookings.find({owner:session, date:{$gte:clock.format(new Date()).slice(0,10)}},
           {projection:{_id:0,owner:0,ownSlot:0}}).sort({date:1,time:1}).toArray() : [],
         reviews.aggregate([{$group:{_id:'$restaurantId',average:{$avg:'$rating'},count:{$sum:1},
           latest:{$topN:{n:3,sortBy:{updatedAt:-1},output:{author:'$author',rating:'$rating',comment:'$comment'}}}}},
           {$project:{_id:0,restaurantId:'$_id',average:1,count:1,latest:1}}]).toArray(),
-        user ? reviews.find({owner:session},{projection:{_id:0,restaurantId:1,rating:1,comment:1}}).toArray() : []
+        user ? reviews.find({owner:session},{projection:{_id:0,restaurantId:1,rating:1,comment:1}}).toArray() : [],
+        user ? coupons.find({owner:session,bookingId:{$exists:false},expiresAt:{$gt:new Date()}},
+          {projection:{_id:0,id:1,restaurantId:1,percent:1}}).toArray() : []
       ]);
-      return send(res,200,{restaurants:[...restaurantExamples,...custom],times,reservations,ratings,ownReviews,canBook:Boolean(user)});
+      return send(res,200,{restaurants:[...restaurantExamples,...custom],times,reservations,ratings,ownReviews,ownCoupons,canBook:Boolean(user)});
     }
     if (req.method !== 'POST') return send(res,405,{error:'Niedozwolona metoda.'});
     if (!req.headers.origin || req.headers['sec-fetch-site'] === 'cross-site' ||
@@ -96,8 +99,18 @@ export default async function restaurants(req, res) {
     }
     if (body?.action === 'cancel') {
       if (typeof body.id !== 'string') return send(res,400,{error:'Nieprawidłowa rezerwacja.'});
-      const result = await bookings.deleteOne({id:body.id,owner:session});
-      return result.deletedCount ? send(res,200,{}) : send(res,404,{error:'Nie znaleziono Twojej rezerwacji.'});
+      const client = await connection;
+      const [today, timeNow] = clock.format(new Date()).split(' ');
+      const result = await client.withSession(transaction => transaction.withTransaction(async () => {
+        const removed = await bookings.findOneAndDelete({id:body.id,owner:session,
+          $or:[{date:{$gt:today}},{date:today,time:{$gt:timeNow}}]},{session:transaction});
+        if (removed?.couponId) {
+          await coupons.updateOne({_id:removed.couponId,owner:session,bookingId:removed.id},
+            {$unset:{bookingId:''}},{session:transaction});
+        }
+        return removed;
+      }));
+      return result ? send(res,200,{}) : send(res,404,{error:'Nie znaleziono Twojej nadchodzącej rezerwacji.'});
     }
     if (body?.action === 'review') {
       const {restaurantId,rating} = body;
@@ -114,7 +127,8 @@ export default async function restaurants(req, res) {
       return send(res,200,{});
     }
     if (body?.action !== 'reserve') return send(res,400,{error:'Nieznana operacja.'});
-    const {restaurantId,date,time,guests} = body;
+    const {restaurantId,date,time,guests,couponId} = body;
+    if (couponId && (typeof couponId !== 'string' || !/^[a-f0-9-]{36}$/.test(couponId))) return send(res,400,{error:'Nieprawidłowy kupon.'});
     if (typeof restaurantId !== 'string' || !validDate(date,time) || !Number.isInteger(guests) || guests < 1 || guests > 6) {
       return send(res,400,{error:'Wybierz przyszły termin do 30 dni i podaj liczbę osób od 1 do 6.'});
     }
@@ -127,7 +141,21 @@ export default async function restaurants(req, res) {
     for (const {table} of tableOptions) {
       const booking = {id:randomUUID(),restaurantId,restaurantName:restaurant.name,date,time,guests,table,owner:session,ownSlot};
       try {
-        await bookings.insertOne({_id:[restaurantId,date,time,table].join(':'),...booking});
+        const stored = {_id:[restaurantId,date,time,table].join(':'),...booking};
+        if (couponId) {
+          const client = await connection;
+          const redeemed = await client.withSession(transaction => transaction.withTransaction(async () => {
+            const coupon = await coupons.findOneAndUpdate({_id:couponId,owner:session,restaurantId,bookingId:{$exists:false},expiresAt:{$gt:new Date()}},
+              {$set:{bookingId:booking.id}},{session:transaction});
+            if (!coupon) return null;
+            await bookings.insertOne({...stored,couponId,discount:coupon.percent},{session:transaction});
+            return coupon;
+          }));
+          if (!redeemed) return send(res,409,{error:'Ten kupon jest nieważny lub został już użyty.'});
+          booking.discount = redeemed.percent;
+        } else {
+          await bookings.insertOne(stored);
+        }
         const {owner, ownSlot:slot, ...publicBooking} = booking;
         return send(res,201,publicBooking);
       } catch (error) {

@@ -61,7 +61,7 @@ function renderRestaurants() {
   }).join('');
   const bookings = canBook ? `<section class="restaurant-bookings"><h2>Moje rezerwacje</h2>
     ${board.reservations.length ? board.reservations.map(item => `<article class="card restaurant-booking">
-      <div><h3>${escape(item.restaurantName)}</h3><p>${formatDate(item.date + 'T' + item.time)} · stolik ${item.table} · osób: ${item.guests}</p></div>
+      <div><h3>${escape(item.restaurantName)}</h3><p>${formatDate(item.date + 'T' + item.time)} · stolik ${item.table} · osób: ${item.guests}${item.discount ? ` · kupon −${item.discount}%` : ''}</p></div>
       <button class="secondary" data-action="restaurant-cancel" data-id="${escape(item.id)}">Anuluj rezerwację</button>
     </article>`).join('') : '<p class="muted">Nie masz nadchodzących rezerwacji.</p>'}
   </section>` : '';
@@ -97,11 +97,14 @@ async function handleRestaurantAction(action, id) {
       'Dodaj restaurację', data => finish({action:'addRestaurant',name:data.get('name'),cuisine:data.get('cuisine'),
         deck:data.get('deck'),description:data.get('description'),tableCount:Number(data.get('tableCount')),menu:parseRestaurantMenu(data.get('menu'))}, 'Dodano restaurację.'));
   } else if (action === 'restaurant-reserve' && place) {
+    const applicable = (restaurantBoard.ownCoupons ?? []).filter(coupon => coupon.restaurantId === id);
     openForm('Zarezerwuj stolik', `<p>${escape(place.name)} · rezerwacja na 90 min</p>
       <label>Data <input type="date" name="date" min="${dateValue()}" max="${dateValue(30)}" value="${dateValue()}" required></label>
       <label>Godzina <select name="time">${restaurantBoard.times.map(time => `<option>${escape(time)}</option>`).join('')}</select></label>
-      <label>Liczba osób <input type="number" name="guests" min="1" max="${Math.max(...place.tables)}" value="2" required></label>`,
-      'Potwierdź rezerwację', data => finish({action:'reserve',restaurantId:id,date:data.get('date'),time:data.get('time'),guests:Number(data.get('guests'))},'Stolik zarezerwowany.'));
+      <label>Liczba osób <input type="number" name="guests" min="1" max="${Math.max(...place.tables)}" value="2" required></label>
+      ${applicable.length ? `<label>Kupon <select name="couponId"><option value="">Bez kuponu</option>
+        ${applicable.map(coupon => `<option value="${escape(coupon.id)}">−${coupon.percent}%</option>`).join('')}</select></label>` : ''}`,
+      'Potwierdź rezerwację', data => finish({action:'reserve',restaurantId:id,date:data.get('date'),time:data.get('time'),guests:Number(data.get('guests')),couponId:data.get('couponId')},'Stolik zarezerwowany.'));
   } else if (action === 'restaurant-review' && place) {
     const review = restaurantBoard.ownReviews?.find(item => item.restaurantId === id);
     openForm(review ? 'Edytuj opinię' : 'Dodaj opinię', `<p>${escape(place.name)}</p>

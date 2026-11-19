@@ -601,9 +601,10 @@ function render() {
   const administration = page === 'administracja';
   const restaurants = page === 'restauracje';
   const statistics = page === 'statystyki';
+  const games = page === 'gry';
   const map = page === 'mapa';
   const activePage = administration ? 'profil' :
-    (calendar || reports || discover || profile || map || restaurants || statistics ? page : 'aktywnosci');
+    (calendar || reports || discover || profile || map || restaurants || statistics || games ? page : 'aktywnosci');
   content.classList.toggle('map-content', map);
   document.querySelectorAll('[data-page]').forEach(link => {
     if (link.dataset.page === activePage) link.setAttribute('aria-current', 'page');
@@ -612,7 +613,9 @@ function render() {
   activatePersonalProfile();
   updateNetwork();
   renderNotifications();
-  if (statistics) {
+  if (games) {
+    content.innerHTML = renderGames();
+  } else if (statistics) {
     content.innerHTML = renderShipStatistics();
   } else if (restaurants) {
     content.innerHTML = renderRestaurants();
@@ -732,6 +735,7 @@ function resetProfileSession() {
   skippedOnline.clear();
   restaurantBoard = undefined;
   shipStatistics = undefined;
+  resetGameSession();
   notificationBoard = undefined;
   notificationError = '';
   pendingNotificationChat = undefined;
@@ -1036,6 +1040,10 @@ content.addEventListener('click', e => {
   const button = e.target.closest('button[data-action]');
   if (!button) return;
   const {action, id} = button.dataset;
+  if (action.startsWith('game-')) {
+    handleGameAction(action, id);
+    return;
+  }
   if (action === 'statistics-refresh') {
     void loadShipStatistics();
     return;
@@ -1199,6 +1207,7 @@ content.addEventListener('pointercancel', finishSwipe);
 content.addEventListener('lostpointercapture', finishSwipe);
 
 content.addEventListener('change', event => {
+  if (event.target.id === 'roulette-color') rouletteChoice = event.target.value;
   const {id, value} = event.target;
   if (id === 'crew-intent' || id === 'crew-interest') {
     if (!state.discoveryFilters) state.discoveryFilters = {};
@@ -1228,6 +1237,7 @@ function refreshPage() {
   render();
   if (location.hash === '#restauracje') void loadRestaurants();
   if (location.hash === '#statystyki') void loadShipStatistics();
+  if (location.hash === '#gry') void loadGameBoard();
   void refreshDiscovery();
   if (isDutyPage() && state.userProfile) void loadDuties();
 }
@@ -1282,6 +1292,7 @@ setInterval(() => { if (!document.hidden) void refreshDiscovery(); }, 3000);
 window.addEventListener('online', refreshEvents);
 window.addEventListener('online', loadRestaurants);
 window.addEventListener('online', loadShipStatistics);
+window.addEventListener('online', loadGameBoard);
 setInterval(() => { if (!document.hidden) void refreshEvents(); }, 15000);
 
 const mobileMenu = document.querySelector('.mobile-menu-toggle');

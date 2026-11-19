@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import games from '../games-http.mjs';
 import notifications from '../notification-http.mjs';
 import { MongoClient } from 'mongodb';
 import { discoveryId, discoveryFields } from '../discovery-profile.mjs';
@@ -32,6 +33,7 @@ export function validProfile(profile) {
 
 export default async function workspace(req, res) {
   const url = new URL(req.url, 'http://localhost');
+  if (url.pathname === '/api/games' || url.searchParams.get('resource') === 'games') return games(req, res);
   if (url.pathname === '/api/notifications' || url.searchParams.get('resource') === 'notifications') {
     return notifications(req, res);
   }
