@@ -621,7 +621,8 @@ function render() {
     content.innerHTML = renderUserAdministration();
   } else if (map) {
     if (!content.querySelector('.ship-map-frame')) {
-      content.innerHTML = '<iframe class="ship-map-frame" title="Mapa statku" src="navigation.html?embed=1"></iframe>';
+      content.innerHTML = '<h1 class="visually-hidden">Mapa statku</h1>' +
+        '<iframe class="ship-map-frame" title="Plan pokładów Wonder of the Seas" src="navigation.html?embed=1"></iframe>';
     }
   } else if (profile) {
     content.innerHTML = renderUserProfile();
@@ -842,7 +843,8 @@ function renderUserAdministration() {
       <p>Przekaż go prywatnie. Użytkownik wpisze go po wybraniu „Zaloguj się kodem”.</p>
       <input aria-label="Jednorazowy kod logowania" value="${newUserCode}" readonly>
       <button class="secondary" data-action="admin-dismiss-code">Ukryj kod</button></section>` : ''}
-    <div class="grid">${adminUsers.map(user => `<article class="card">
+    ${adminUsers.length > 6 ? '<label class="directory-filter">Szukaj użytkownika<input type="search" data-filter-list="admin-users" placeholder="Nazwa lub rola"></label>' : ''}
+    <div class="admin-directory" id="admin-users">${adminUsers.map(user => `<article class="card" data-search-text="${escape(user.name + ' ' + (user.role || ''))}">
       <p class="badge">${user.archived ? 'Konto wyłączone' : user.published ? 'Profil opublikowany' : 'Bez publicznej karty'}</p>
       <h3>${escape(user.name)}</h3>${user.role ? `<p class="muted">${escape(user.role)}</p>` : ''}
       <footer>${user.archived ? `<button class="primary" data-action="admin-restore" data-id="${user.id}">Przywróć konto</button>` :
@@ -850,11 +852,12 @@ function renderUserAdministration() {
         <button class="secondary" data-action="admin-resetCode" data-id="${user.id}">Wydaj kod logowania</button>
         <button class="secondary" data-action="admin-archive" data-id="${user.id}">Usuń z aktywnych</button>`}</footer></article>`).join('') ||
       '<p>Brak użytkowników.</p>'}</div>
-    <section class="card admin-audit"><h2>Dziennik operacji</h2>
+    <p data-filter-empty="admin-users" role="status" hidden>Brak użytkowników pasujących do wyszukiwania.</p>
+    <details class="card admin-audit"><summary>Dziennik operacji</summary>
       ${adminLogs.length ? `<ol>${adminLogs.map(log => `<li>
         <div><strong>${escape(adminLogLabels[log.action] || log.action)}</strong><span>${escape(log.name)}</span></div>
         <time datetime="${escape(log.at)}">${notificationTime.format(new Date(log.at))}</time></li>`).join('')}</ol>` :
-        '<p class="muted">Brak zapisanych operacji.</p>'}</section>`;
+        '<p class="muted">Brak zapisanych operacji.</p>'}</details>`;
 }
 
 async function handleUserAdministration(action, id) {
@@ -1269,15 +1272,6 @@ window.addEventListener('online', () => {
   if (isDutyPage() && state.userProfile) void loadDuties();
 });
 window.addEventListener('offline', updateNetwork);
-window.addEventListener('beforeinstallprompt', event => {
-  event.preventDefault();
-  const install = document.querySelector('#install');
-  install.hidden = false;
-  install.onclick = async () => {
-    install.hidden = true;
-    await event.prompt();
-  };
-});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(console.error);
 refreshPage();
 void syncWorkspace();
@@ -1293,25 +1287,3 @@ window.addEventListener('online', loadRestaurants);
 window.addEventListener('online', loadShipStatistics);
 window.addEventListener('online', loadWelcomeDraw);
 setInterval(() => { if (!document.hidden) void refreshEvents(); }, 15000);
-
-const mobileMenu = document.querySelector('.mobile-menu-toggle');
-const navigation = document.querySelector('#mobile-navigation');
-if (mobileMenu && navigation) {
-  function setMenu(open) {
-    mobileMenu.setAttribute('aria-expanded', String(open));
-  }
-  mobileMenu.addEventListener('click', () => setMenu(mobileMenu.getAttribute('aria-expanded') !== 'true'));
-  navigation.addEventListener('click', event => {
-    if (mobileMenu.getAttribute('aria-expanded') === 'true' && event.target.closest('a[href^="#"]')) {
-      setMenu(false);
-      mobileMenu.focus({preventScroll: true});
-    }
-  });
-  window.addEventListener('hashchange', () => setMenu(false));
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && !dialog.open && mobileMenu.getAttribute('aria-expanded') === 'true') {
-      setMenu(false);
-      mobileMenu.focus();
-    }
-  });
-}

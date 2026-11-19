@@ -10,47 +10,63 @@
 <link rel="icon" href="icon.png">
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="stylesheet" href="profile.css?v=1">
-<link rel="stylesheet" href="style.css?v=40">
+<link rel="stylesheet" href="style.css?v=42">
+<link rel="stylesheet" href="design.css?v=2">
+<script src="design.js?v=1" defer></script>
 <title>CrewConnect — Na pokładzie</title>
 </head>
-<body class="crewconnect-layout">
-<aside class="sidebar" aria-label="CrewConnect">
-  <a class="brand" href="#aktywnosci"><span class="logo" aria-hidden="true">⚓</span><span>Crew<span>Connect</span></span></a>
-  <button type="button" class="mobile-menu-toggle" aria-expanded="false" aria-controls="mobile-navigation">
-    <span class="menu-icon" aria-hidden="true"></span><span>Menu</span>
-  </button>
-  <div class="sidebar-panel" id="mobile-navigation">
+<body class="crewconnect-layout" data-shell>
+<a class="skip-link" href="#content">Przejdź do treści</a>
+<aside class="sidebar shell-drawer" id="site-navigation" data-drawer aria-label="Menu CrewConnect">
+  <div class="drawer-top">
+    <a class="brand" href="./"><span class="logo" aria-hidden="true">⚓</span><span class="brand-wordmark">Crew<span>Connect</span></span></a>
+    <button class="icon-button drawer-close" type="button" data-drawer-close aria-label="Zamknij menu"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#close"/></svg></button>
+  </div>
+  <div class="drawer-voyage">
+    <span class="voyage-icon"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#ship"/></svg></span>
+    <div><span>Na pokładzie</span><strong>MV Horizon</strong></div>
+  </div>
   <nav aria-label="Menu główne">
     <div class="nav-group" role="group" aria-labelledby="nav-life">
       <p id="nav-life">Życie na pokładzie</p>
-      <a href="#aktywnosci" data-page="aktywnosci">Aktywności</a>
-      <a href="#kalendarz" data-page="kalendarz">Kalendarz</a>
-      <a href="#restauracje" data-page="restauracje">Restauracje</a>
-      <a href="#zaloga" data-page="zaloga">Poznaj ludzi</a>
-      <a href="#statystyki" data-page="statystyki">Statystyki statku</a>
-      <a class="ship-nav-link" href="#mapa" data-page="mapa">Mapa statku</a>
+      <a href="#aktywnosci" data-page="aktywnosci"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#ticket"/></svg>Aktywności</a>
+      <a href="#kalendarz" data-page="kalendarz"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#calendar"/></svg>Kalendarz</a>
+      <a href="#restauracje" data-page="restauracje"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#cutlery"/></svg>Restauracje</a>
+      <a href="#zaloga" data-page="zaloga"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#users"/></svg>Poznaj ludzi</a>
+      <a href="#statystyki" data-page="statystyki"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#chart"/></svg>Statystyki statku</a>
+      <a class="ship-nav-link" href="#mapa" data-page="mapa"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#map"/></svg>Mapa statku</a>
     </div>
   </nav>
   <div class="profile"><span>Mój profil</span><a id="crew" href="#profil" data-page="profil">Dodaj mój profil</a></div>
-  </div>
 </aside>
-<main>
-  <header class="top"><span><span class="dot"></span> MV Horizon</span><span id="network">Brak aktywnego profilu</span>
+<div class="drawer-shade" data-drawer-shade aria-hidden="true"></div>
+<main data-drawer-background>
+  <header class="top shell-top">
+    <div class="shell-start">
+      <button class="icon-button drawer-toggle" type="button" data-drawer-toggle aria-expanded="false" aria-controls="site-navigation" aria-label="Otwórz menu"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#menu"/></svg></button>
+      <a class="mobile-brand" href="./" aria-label="CrewConnect, strona główna"><span aria-hidden="true">⚓</span></a>
+      <span class="shell-voyage">MV Horizon</span>
+    </div>
+    <div class="shell-actions">
+    <span id="network">Brak aktywnego profilu</span>
     <details class="notification-menu" hidden>
-      <summary aria-label="Powiadomienia"><span aria-hidden="true">🔔</span><span data-unread hidden></span></summary>
+      <summary aria-label="Powiadomienia"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg?v=2#bell"/></svg><span data-unread hidden></span></summary>
       <section class="notification-popover" aria-label="Centrum powiadomień">
         <h2>Powiadomienia</h2>
         <div class="notification-tools"><button class="secondary" type="button" data-notification-action="readAll">Oznacz jako przeczytane</button>
           <button class="secondary" type="button" data-notification-action="clear">Wyczyść listę</button></div>
         <div class="notification-list"></div>
       </section>
-    </details><button id="install" class="secondary" hidden>Zainstaluj PWA</button></header>
-  <div id="content"></div>
+    </details>
+    <button class="icon-button" type="button" data-theme-toggle aria-label="Włącz tryb ciemny"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#moon"/></svg></button>
+    </div>
+  </header>
+  <div id="content" tabindex="-1"></div>
 </main>
-<footer class="site-footer">
+<footer class="site-footer" data-drawer-background>
   <div class="site-footer-inner">
     <div class="site-footer-identity">
-      <a class="brand" href="#aktywnosci"><span class="logo" aria-hidden="true">⚓</span><span>Crew<span>Connect</span></span></a>
+      <a class="brand" href="./"><span class="logo" aria-hidden="true">⚓</span><span class="brand-wordmark">Crew<span>Connect</span></span></a>
       <p>MV Horizon</p>
     </div>
     <nav class="site-footer-links" aria-label="Nawigacja w stopce">
@@ -71,6 +87,6 @@
 <script src="profile.js?v=1" defer></script>
 <script src="notifications.js?v=1" defer></script>
 <script src="games.js?v=3" defer></script>
-<script src="app.js?v=40" defer></script>
+<script src="app.js?v=41" defer></script>
 </body>
 </html>

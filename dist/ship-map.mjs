@@ -10,6 +10,7 @@ const motion = el('route-motion');
 const stage = el('map-stage');
 const mapSpace = el('map-space');
 const viewport = el('map-viewport');
+const compactLayout = matchMedia('(max-width: 760px)');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const apiBase = document.querySelector('meta[name="crewconnect-api"]').content;
 const api = apiBase ? new URL('/api/places', apiBase) : new URL('api/places', location.href);
@@ -197,9 +198,13 @@ function renderRoute() {
         'Wybierz punkt startowy i miejsce docelowe.') + '</p>';
     return;
   }
-  el('map-step-count').textContent = `Krok ${stepIndex + 1} z ${steps.length} · pokład ${steps[stepIndex].point.deck}`;
-  el('map-maneuver').textContent = directionIcon(steps[stepIndex]);
-  el('map-instruction').textContent = steps[stepIndex].instruction;
+  const step = steps[stepIndex];
+  const onRouteDeck = step.point.deck === deck;
+  el('map-step-count').textContent = onRouteDeck ? `Krok ${stepIndex + 1} z ${steps.length} · pokład ${deck}` : 'Podgląd pokładu';
+  el('map-maneuver').textContent = onRouteDeck ? directionIcon(step) : '↶';
+  el('map-instruction').textContent = onRouteDeck ? step.instruction : `Trasa na pokładzie ${step.point.deck}`;
+  el('guidance-controls').hidden = !onRouteDeck;
+  el('resume-route').hidden = onRouteDeck;
   el('previous-step').disabled = stepIndex === 0;
   el('next-step').disabled = stepIndex === steps.length - 1;
   card.innerHTML = `<div class="route-head">
@@ -286,10 +291,17 @@ function focusStep(step) {
 }
 
 function revealMapOnMobile() {
-  if (matchMedia('(max-width: 760px)').matches) {
+  if (compactLayout.matches) {
     viewport.closest('.deck-card').scrollIntoView({block: 'start', behavior: reducedMotion.matches ? 'instant' : 'smooth'});
   }
 }
+
+function showRouteOptionsForLayout() {
+  el('route-options').open = !compactLayout.matches;
+}
+
+showRouteOptionsForLayout();
+compactLayout.addEventListener('change', showRouteOptionsForLayout);
 
 function showStep(index, fromList = false) {
   const step = steps[index];
@@ -568,6 +580,7 @@ function switchDeck(selected) {
   } else {
     renderDeck();
   }
+  renderRoute();
   const points = !picking && panel === 'guest' ? (route?.legs ?? []).flatMap(leg =>
     [leg.from, leg.to].filter(point => point.deck === deck)) : [];
   framePoints(points);
@@ -589,6 +602,12 @@ el('route-card').addEventListener('click', event => {
 });
 el('previous-step').addEventListener('click', () => showStep(stepIndex - 1));
 el('next-step').addEventListener('click', () => showStep(stepIndex + 1));
+el('resume-route').addEventListener('click', () => {
+  showStep(stepIndex);
+  const next = el('next-step');
+  const previous = el('previous-step');
+  (next.disabled ? (previous.disabled ? viewport : previous) : next).focus({preventScroll: true});
+});
 el('pick-origin').addEventListener('click', () => setPicking('origin'));
 el('pick-place').addEventListener('click', () => setPicking('place'));
 el('catalog').addEventListener('change', event => editPlace(event.target.value));

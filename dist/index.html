@@ -4,33 +4,139 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101c2d">
-  <meta name="description" content="Wydarzenia, spotkania i wspólny kalendarz dla pasażerów rejsu.">
+  <meta name="description" content="Zaplanuj dzień na rejsie, odkryj pokłady Wonder of the Seas i znajdź ludzi, z którymi spędzisz czas na morzu.">
+  <meta property="og:title" content="CrewConnect — Twój przewodnik po rejsie">
+  <meta property="og:description" content="Wybierz statek, odkryj pokłady i zaplanuj dzień na morzu.">
   <meta name="crewconnect-api" content="">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.png">
   <link rel="apple-touch-icon" href="icon.png">
   <link rel="stylesheet" href="social.css?v=11">
   <link rel="stylesheet" href="profile.css?v=1">
-  <title>CrewConnect — Wydarzenia na rejsie</title>
+  <link rel="stylesheet" href="design.css?v=2">
+  <link rel="stylesheet" href="landing.css?v=2">
+  <script src="design.js?v=1" defer></script>
+  <title>CrewConnect — Twój przewodnik po rejsie</title>
 </head>
-<body>
+<body class="app-shell is-landing" data-shell>
   <a class="skip-link" href="#content">Przejdź do treści</a>
-  <aside class="sidebar">
-    <a class="brand" href="#wydarzenia"><span class="brand-icon" aria-hidden="true">⚓</span><span>Crew<span>Connect</span></span></a>
+  <aside class="sidebar shell-drawer" id="site-navigation" data-drawer aria-label="Menu CrewConnect">
+    <div class="drawer-top">
+      <a class="brand" href="./"><span class="brand-icon" aria-hidden="true">⚓</span><span class="brand-wordmark">Crew<span>Connect</span></span></a>
+      <button class="icon-button drawer-close" type="button" data-drawer-close aria-label="Zamknij menu"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#close"/></svg></button>
+    </div>
+    <div class="drawer-voyage" id="drawer-voyage" hidden>
+      <span class="voyage-icon"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#ship"/></svg></span>
+      <div><span>Na pokładzie</span><strong id="drawer-voyage-name"></strong></div>
+    </div>
     <nav id="navigation" class="app-nav" aria-label="Menu główne" hidden></nav>
+    <nav id="public-navigation" class="app-nav" aria-label="Menu główne">
+      <div class="nav-group" role="group" aria-labelledby="nav-public-title">
+        <p id="nav-public-title">Przewodnik</p>
+        <a href="#statki"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#ship"/></svg>Wybierz statek</a>
+        <a href="#mapa"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#map"/></svg>Mapa statku</a>
+        <a href="legacy.html#restauracje"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#cutlery"/></svg>Restauracje</a>
+      </div>
+      <a class="drawer-sign-in" href="#logowanie"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#user"/></svg>Zaloguj się</a>
+    </nav>
     <div id="sidebar-profile" class="sidebar-profile" hidden>
-      <span id="sidebar-user-name"></span>
-      <a id="sidebar-account" href="#profil">Mój profil</a>
+      <a id="sidebar-account" href="#profil" aria-label="Mój profil">
+        <span class="voyage-icon"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#user"/></svg></span>
+        <div><strong id="sidebar-user-name"></strong><span>Mój profil</span></div>
+      </a>
     </div>
   </aside>
-  <header class="app-header">
-    <span id="trip-label"></span>
+  <div class="drawer-shade" data-drawer-shade aria-hidden="true"></div>
+  <header class="app-header shell-top" data-drawer-background>
+    <div class="shell-start">
+      <button class="icon-button drawer-toggle" type="button" data-drawer-toggle aria-expanded="false" aria-controls="site-navigation" aria-label="Otwórz menu"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#menu"/></svg></button>
+      <a class="mobile-brand" href="./" aria-label="CrewConnect, strona główna"><span aria-hidden="true">⚓</span></a>
+      <span id="trip-label"></span>
+    </div>
     <div class="header-context">
-      <a id="ship-map-link" class="button secondary" href="#mapa">Mapa statku</a>
-      <a id="role-link" class="button secondary" href="#planner" hidden>Panel plannera</a>
+      <a id="ship-map-link" class="icon-button" href="#mapa" aria-label="Mapa statku" title="Mapa statku"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#map"/></svg></a>
+      <details class="notification-menu" id="social-notifications" hidden>
+        <summary aria-label="Powiadomienia"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg?v=2#bell"/></svg><span data-unread hidden></span></summary>
+        <section class="notification-popover" aria-label="Centrum powiadomień">
+          <h2>Powiadomienia</h2>
+          <div class="notification-tools">
+            <button class="button secondary" type="button" data-notification-action="readAll">Oznacz jako przeczytane</button>
+            <button class="button secondary" type="button" data-notification-action="clear">Wyczyść listę</button>
+          </div>
+          <div class="notification-list"></div>
+        </section>
+      </details>
+      <button class="icon-button" type="button" data-theme-toggle aria-label="Włącz tryb ciemny"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#moon"/></svg></button>
     </div>
   </header>
-  <main id="content" tabindex="-1"></main>
+  <header class="landing-bar">
+    <a class="brand" href="./"><span class="brand-icon" aria-hidden="true">⚓</span><span class="brand-wordmark">Crew<span>Connect</span></span></a>
+    <nav aria-label="Menu strony głównej"><a href="#statki">Statki</a><a href="#przewodnik">Na pokładzie</a></nav>
+    <div class="landing-bar-actions">
+      <button class="icon-button" type="button" data-theme-toggle aria-label="Włącz tryb ciemny"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#moon"/></svg></button>
+      <a href="#wydarzenia" class="button">Wejdź na pokład</a>
+    </div>
+  </header>
+  <main id="content" tabindex="-1" data-drawer-background>
+    <div id="landing-page">
+    <section class="landing-hero" aria-labelledby="landing-title">
+      <div class="landing-hero-copy">
+        <p class="landing-kicker" data-hero-copy><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#compass"/></svg> Przewodnik pasażera</p>
+        <h1 id="landing-title" tabindex="-1" data-hero-copy>Obierz kurs<br><em>na swój rejs.</em></h1>
+        <p data-hero-copy>Znajdź drogę na statku i odkryj, co dzieje się na pokładzie. Zaplanuj dzień na morzu po swojemu.</p>
+        <div class="landing-actions" data-hero-copy>
+          <a class="button landing-primary" href="#statki">Wybierz statek</a>
+          <a class="button landing-secondary" href="#mapa"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#map"/></svg> Zobacz mapę</a>
+        </div>
+      </div>
+      <figure class="landing-hero-photo">
+        <img src="assets/wonder.webp" srcset="assets/wonder-small.webp 720w, assets/wonder.webp 1440w" sizes="(max-width: 760px) 100vw, 58vw" width="1440" height="1080" fetchpriority="high" alt="">
+        <figcaption><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#ship"/></svg> Wonder of the Seas <small>Wizualizacja</small></figcaption>
+      </figure>
+    </section>
+    <section class="landing-section fleet" id="statki" aria-labelledby="fleet-title" tabindex="-1">
+      <header class="landing-section-head">
+        <div><p class="landing-kicker">Wybierz kierunek</p><h2 id="fleet-title">Na który statek<br>wchodzisz?</h2></div>
+        <p>Zwiedź Wonder of the Seas albo otwórz demo życia na pokładzie MV Horizon.</p>
+      </header>
+      <div class="fleet-grid">
+        <article class="fleet-card fleet-wonder" data-reveal>
+          <img src="assets/wonder-small.webp" width="720" height="540" loading="lazy" alt="">
+          <div class="fleet-card-body">
+            <p class="fleet-label"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#map"/></svg> Przewodnik po pokładach</p>
+            <h3>Wonder of the Seas</h3>
+            <p>Sprawdź, jak dojść do kasyna, teatru czy ścianki wspinaczkowej na pokładach 4–7.</p>
+            <a class="fleet-link" href="#mapa">Otwórz mapę Wonder of the Seas <svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#chevron"/></svg></a>
+          </div>
+        </article>
+        <article class="fleet-card fleet-horizon" data-reveal>
+          <img src="assets/horizon.webp" width="820" height="547" loading="lazy" alt="">
+          <div class="fleet-card-body">
+            <p class="fleet-label"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#ticket"/></svg> Rejs demonstracyjny</p>
+            <h3>MV Horizon</h3>
+            <p>Ułóż plan dnia, poznaj innych pasażerów i odkryj restauracje na pokładzie.</p>
+            <a class="fleet-link" href="legacy.html#aktywnosci">Odkryj MV Horizon <svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#chevron"/></svg></a>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section class="landing-port" id="przewodnik" aria-labelledby="guide-title" tabindex="-1">
+      <div class="landing-section">
+        <header class="landing-section-head"><div><p class="landing-kicker">Na pokładzie</p><h2 id="guide-title">Masz plan na morze.</h2></div></header>
+        <div class="guide-grid">
+          <article data-reveal><span class="guide-icon"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#map"/></svg></span><h3>Znajdź drogę</h3><p>Wybierz cel na mapie. Zobacz, którędy przejść i na którym pokładzie wysiąść.</p><a href="#mapa">Mapa statku</a></article>
+          <article data-reveal><span class="guide-icon"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#calendar"/></svg></span><h3>Zaplanuj dzień</h3><p>Sprawdź program rejsu i wybierz wydarzenia, na które masz ochotę.</p><a href="#kalendarz">Kalendarz rejsu</a></article>
+          <article data-reveal><span class="guide-icon"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#users"/></svg></span><h3>Poznaj pasażerów</h3><p>Umów się na wspólną kawę, trening albo wieczorną grę.</p><a href="#poznaj">Poznaj ludzi</a></article>
+          <article data-reveal><span class="guide-icon"><svg class="ui-icon" aria-hidden="true"><use href="assets/interface.svg#cutlery"/></svg></span><h3>Zjedz na pokładzie</h3><p>Przejrzyj menu, opinie i rezerwacje stolików.</p><a href="legacy.html#restauracje">Restauracje</a></article>
+        </div>
+      </div>
+    </section>
+    <footer class="landing-footer">
+      <div><span>CrewConnect</span><p>Przewodnik pasażera i demo obsługi rejsu.</p></div>
+      <a href="#logowanie">Zaloguj się</a>
+    </footer>
+    </div>
+  </main>
   <template id="file-help">
     <div class="auth-view">
       <section class="surface">
@@ -45,10 +151,10 @@
   <div id="notice" role="status" aria-live="polite"></div>
   <script>
     if (location.protocol === 'file:') {
-      document.querySelector('#content').append(document.querySelector('#file-help').content.cloneNode(true));
+      document.querySelector('#content').replaceChildren(document.querySelector('#file-help').content.cloneNode(true));
     }
   </script>
   <script src="profile.js?v=1" defer></script>
-  <script type="module" src="social.js?v=15"></script>
+  <script type="module" src="social.js?v=17"></script>
 </body>
 </html>

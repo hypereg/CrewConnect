@@ -130,7 +130,7 @@ textarea { resize: vertical; }
 .map-pin.start-pin { background: #126eaa; z-index: 2; pointer-events: none; }
 .map-pin.active-place { outline: 3px solid #0b7568; outline-offset: 2px; }
 .map-pin:hover, .map-pin:focus-visible { z-index: 4; }
-.map-pin span.pin-label { position: absolute; left: 50%; bottom: calc(100% + 5px); transform: translateX(-50%); width: max-content; max-width: min(160px, 36vw); overflow-wrap: anywhere; padding: 2px 6px; border-radius: 5px; color: var(--ink); background: white; box-shadow: 0 2px 8px #15342d35; font-size: 12px; }
+.map-pin span.pin-label { position: absolute; left: 50%; bottom: calc(100% + 5px); transform: translateX(-50%); width: max-content; max-width: min(160px, 36vw); overflow-wrap: anywhere; padding: 2px 6px; border-radius: 5px; color: var(--ink); background: var(--surface, white); box-shadow: 0 2px 8px #15342d35; font-size: 12px; }
 .map-pin.near-stern .pin-label { left: auto; right: 0; transform: none; }
 .map-pin:not(:hover):not(:focus-visible):not(.selected) .pin-label { visibility: hidden; }
 .map-viewport.picking .map-pin { cursor: crosshair; }
@@ -180,7 +180,7 @@ textarea { resize: vertical; }
 .map-note { margin: 0; font-size: 13px; }
 
 .place-picker .masthead, .place-picker .map-heading, .place-picker #origin-field,
-.place-picker .transport, .place-picker .map-legend, .place-picker .route-card, .place-picker .map-note { display: none; }
+.place-picker .route-options, .place-picker .map-legend, .place-picker .route-card, .place-picker .map-note { display: none; }
 .place-picker .map-page { padding: 10px 10px 7rem; }
 .place-picker .map-layout { gap: 10px; }
 .place-picker .controls { padding: 12px; }

@@ -23,7 +23,13 @@ const assets = new Map([
   ['/restaurants.js', ['restaurants.js', 'text/javascript; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/social.js', ['social.js', 'text/javascript; charset=utf-8']],
+  ['/social-notifications.js', ['social-notifications.js', 'text/javascript; charset=utf-8']],
   ['/social.css', ['social.css', 'text/css; charset=utf-8']],
+  ['/design.css', ['design.css', 'text/css; charset=utf-8']],
+  ['/design.js', ['design.js', 'text/javascript; charset=utf-8']],
+  ['/landing.css', ['landing.css', 'text/css; charset=utf-8']],
+  ['/assets/interface.svg', ['assets/interface.svg', 'image/svg+xml']],
+  ['/assets/motion-14.14.0.js', ['assets/motion-14.14.0.js', 'text/javascript; charset=utf-8']],
   ['/profile.js', ['profile.js', 'text/javascript; charset=utf-8']],
   ['/profile.css', ['profile.css', 'text/css; charset=utf-8']],
   ['/duties.js', ['duties.js', 'text/javascript; charset=utf-8']],
@@ -38,6 +44,12 @@ const assets = new Map([
   ['/icon.png', ['icon.png', 'image/png']],
   ['/icon-large.png', ['icon-large.png', 'image/png']]
 ]);
+for (const file of ['bricolage-latin.woff2', 'bricolage-latin-ext.woff2', 'dm-sans-latin.woff2', 'dm-sans-latin-ext.woff2']) {
+  assets.set('/assets/' + file, ['assets/' + file, 'font/woff2']);
+}
+for (const file of ['wonder.webp', 'wonder-small.webp', 'horizon.webp']) {
+  assets.set('/assets/' + file, ['assets/' + file, 'image/webp']);
+}
 
 createServer(async (req, res) => {
   const path = req.url.split('?')[0];

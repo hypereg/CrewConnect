@@ -97,13 +97,18 @@ const staff = user => user.role !== 'guest';
 const manages = (user, event) => user.role === 'admin' || event.ownerId === user.id;
 const hasStarted = event => Date.parse(event.startsAt) <= Date.now();
 
-function chatPartner(state, user, voyage, id) {
+function matchedChatPartner(state, user, voyage, id) {
   const person = state.accounts.find(item => item.id === id);
   const connected = (from, to) => state.choices.some(choice =>
     choice.voyageId === voyage?.id && choice.from === from && choice.to === to && choice.choice === 'connect');
-  if (!voyage || !user?.visible || !person?.active || !person.visible ||
-      user.id === id || !membership(user, voyage) || !membership(person, voyage) ||
-      !connected(user.id, id) || !connected(id, user.id)) fail(404, 'Czat jest niedostępny.');
+  if (voyage && user?.visible && person?.active && person.visible && user.id !== id &&
+      membership(user, voyage) && membership(person, voyage) &&
+      connected(user.id, id) && connected(id, user.id)) return person;
+}
+
+function chatPartner(state, user, voyage, id) {
+  const person = matchedChatPartner(state, user, voyage, id);
+  if (!person) fail(404, 'Czat jest niedostępny.');
   return person;
 }
 
@@ -111,6 +116,55 @@ function readChat(state, user, voyage, id) {
   const person = chatPartner(state, user, voyage, id);
   return {person: publicProfile(person), messages: (state.messages || []).filter(item => item.voyageId === voyage.id &&
     ((item.from === user.id && item.to === id) || (item.from === id && item.to === user.id))).slice(-100)};
+}
+
+const notificationKey = (user, voyage) => voyage.id + ':' + user.id;
+
+function notificationBoard(state, user, voyage) {
+  const now = Date.now();
+  const saved = state.notificationState?.[notificationKey(user, voyage)] ?? {};
+  const since = Math.max(saved.clearedAt ?? 0, now - 30 * 86400000);
+  const seen = new Set(saved.readIds);
+  const recent = at => Date.parse(at) > since && Date.parse(at) <= now;
+  const items = state.events.filter(event => event.voyageId === voyage.id && event.status === 'published' &&
+    event.ownerId !== user.id && recent(event.publishedAt)).map(event => ({
+    id: 'event:' + event.id, kind: 'event', target: event.id, title: event.title, at: event.publishedAt
+  }));
+  const partners = new Map();
+  for (const message of state.messages ?? []) {
+    if (message.voyageId !== voyage.id || message.to !== user.id || !recent(message.at)) continue;
+    if (!partners.has(message.from)) partners.set(message.from, matchedChatPartner(state, user, voyage, message.from));
+    const partner = partners.get(message.from);
+    if (partner) items.push({
+      id: 'message:' + message.id, kind: 'message', target: partner.id, title: partner.name, at: message.at
+    });
+  }
+  return {through: new Date(now).toISOString(), items: items.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 50)
+    .map(item => ({...item, unread: Date.parse(item.at) > (saved.readAt ?? 0) && !seen.has(item.id)}))};
+}
+
+function updateNotifications(state, user, voyage, body) {
+  state.notificationState ??= {};
+  const saved = state.notificationState[notificationKey(user, voyage)] ??= {};
+  if (body.action === 'readNotification') {
+    if (!notificationBoard(state, user, voyage).items.some(item => item.id === body.id)) {
+      fail(404, 'To powiadomienie jest niedostępne.');
+    }
+    saved.readIds = [...new Set([...(saved.readIds ?? []), body.id])].slice(-100);
+  } else {
+    const through = typeof body.through === 'string' ? Date.parse(body.through) : NaN;
+    if (!Number.isFinite(through) || through > Date.now()) fail(400, 'Nieprawidłowa data powiadomień.');
+    const field = body.action === 'clearNotifications' ? 'clearedAt' : 'readAt';
+    saved[field] = Math.max(saved[field] ?? 0, through);
+  }
+  return notificationBoard(state, user, voyage);
+}
+
+function openNotificationVoyage(state, user) {
+  if (!user) fail(401, 'Zaloguj się ponownie.');
+  const voyage = activeVoyage(state);
+  if (!voyage || (!staff(user) && !membership(user, voyage))) fail(403, 'Dołącz do aktywnego rejsu.');
+  return voyage;
 }
 
 function invitation(state, token, checkCapacity = true) {
@@ -384,6 +438,7 @@ function saveEvent(state, body, user, voyage, placeFromMap) {
   ] : [];
   const updated = {title, place, description, category: body.category, startsAt, localTime: body.localTime,
     ...(guestEvent && {placeId: placeFromMap.id, deck: placeFromMap.deck}),
+    ...(status === 'published' && event?.status !== 'published' && {publishedAt: new Date().toISOString()}),
     capacity, status, revision: (event?.revision ?? 0) + 1, changes: changes.length ? changes : event?.changes || []};
   const id = event?.id ?? randomUUID();
   if (event) Object.assign(event, updated);
@@ -462,6 +517,7 @@ function memberAction(state, body, user, voyage, placeFromMap) {
 
 const adminActions = new Set(['createVoyage', 'closeVoyage', 'addCabin', 'addCabins', 'issueQr', 'revokeQr',
   'createPlanner', 'togglePlanner', 'resetPlannerCode']);
+const notificationActions = new Set(['readNotification', 'readAllNotifications', 'clearNotifications']);
 
 async function readBody(req) {
   if (req.body !== undefined) return typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
@@ -493,6 +549,7 @@ export default async function social(req, res) {
       }
       const user = session(req, state);
       if (chat !== null) return send(200, readChat(state, user, activeVoyage(state), chat));
+      if (params.get('notifications') === '1') return send(200, notificationBoard(state, user, openNotificationVoyage(state, user)));
       return send(200, board(state, user));
     }
     if (req.method !== 'POST') fail(405, 'Niedozwolona metoda.');
@@ -526,6 +583,10 @@ export default async function social(req, res) {
       setSession(res, account);
       return send(200, board(state, account));
     }
+    if (notificationActions.has(body?.action)) return send(200, await store.change(state => {
+      const user = session(req, state);
+      return updateNotifications(state, user, openNotificationVoyage(state, user), body);
+    }));
     let placeFromMap;
     if (body?.action === 'saveGuestEvent') {
       const state = await store.read();
