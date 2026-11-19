@@ -35,6 +35,13 @@ const formatDate = value => new Intl.DateTimeFormat('pl-PL', {
   ...(value.includes('T') ? {hour: '2-digit', minute: '2-digit'} : {})
 }).format(new Date(value.includes('T') ? value : value + 'T12:00'));
 const participants = event => Object.keys(event.votes);
+const isFull = event => Number.isInteger(event.capacity) && participants(event).length >= event.capacity;
+function signupButton(event, style) {
+  const joined = Boolean(event.votes[state.member]);
+  const full = !joined && isFull(event);
+  const label = joined ? 'Zmień dostępność' : full ? 'Brak miejsc' : 'Zapisz się';
+  return `<button class="${style}" data-action="vote" data-id="${event.id}" ${full ? 'disabled' : ''}>${label}</button>`;
+}
 const sharedSlots = event => participants(event).length < 2 ? [] : event.slots.filter(
   (_, index) => Object.values(event.votes).every(vote => vote.includes(index))
 ).sort();
@@ -68,7 +75,7 @@ function renderCalendar() {
   const agenda = eventsOn(selectedDay).map(({event, slot}) => `
     <article class="agenda-item"><time datetime="${slot}">${slot.slice(11, 16)}</time>
       <div><h3>${escape(event.title)}</h3><p class="muted">${escape(event.type)} · ${escape(event.owner)}</p></div>
-      <button class="secondary" data-action="vote" data-id="${event.id}">${event.votes[state.member] ? 'Zmień dostępność' : 'Zapisz się'}</button>
+      ${signupButton(event, 'secondary')}
     </article>`).join('');
   return `<section class="calendar" aria-labelledby="calendar-title">
     <header class="calendar-header"><div><h1 id="calendar-title">Kalendarz</h1><h2>${monthLabel.format(first)}</h2></div>
@@ -101,8 +108,8 @@ function eventCard(event) {
     <p class="muted">Organizuje ${escape(event.owner)}</p>
     ${event.description ? `<p>${escape(event.description)}</p>` : ''}
     <p class="note"><strong>${summary}</strong></p>
-    <p class="muted">${people.length} zapisanych${people.length ? ' · ' + escape(people.join(', ')) : ''}</p>
-    <footer><button class="primary" data-action="vote" data-id="${event.id}">${event.votes[state.member] ? 'Zmień dostępność' : 'Zapisz się'}</button>
+    <p class="muted">${people.length}${event.capacity ? ' / ' + event.capacity : ''} zapisanych${people.length ? ' · ' + escape(people.join(', ')) : ''}</p>
+    <footer>${signupButton(event, 'primary')}
     ${event.votes[state.member] && event.owner !== state.member ? `<button class="secondary" data-action="leave" data-id="${event.id}">Wypisz się</button>` : ''}</footer>
   </article>`;
 }
@@ -161,6 +168,11 @@ function createEvent(day) {
     <label>Nazwa <input name="title" maxlength="90" required></label>
     <label>Kategoria <select name="type"><option>Gry</option><option>Trening</option><option>Integracja</option><option>Inne</option></select></label>
     <label>Opis <textarea name="description" maxlength="500"></textarea></label>
+    <div class="capacity-field">
+      <label for="event-capacity">Maksymalna liczba osób <output for="event-capacity" id="capacity-value">8</output></label>
+      <input id="event-capacity" name="capacity" type="range" min="2" max="30" value="8" aria-describedby="capacity-hint">
+      <small id="capacity-hint">Od 2 do 30 osób, razem z organizatorem.</small>
+    </div>
     <label>Pierwszy termin <input type="datetime-local" name="slot" value="${preferredTime}" required></label>
     <label>Drugi termin <input type="datetime-local" name="slot" required></label>
     <label>Trzeci termin (opcjonalnie) <input type="datetime-local" name="slot"></label>
@@ -176,10 +188,13 @@ function createEvent(day) {
       return false;
     }
     state.events.unshift({id: crypto.randomUUID(), title: name, owner: state.member,
-      type: data.get('type'), description: data.get('description').trim(), slots,
+      type: data.get('type'), capacity: Number(data.get('capacity')), description: data.get('description').trim(), slots,
       votes: {[state.member]: slots.map((_, index) => index)}});
     save('Dodano aktywność.');
   });
+  const slider = dialog.querySelector('#event-capacity');
+  const value = dialog.querySelector('#capacity-value');
+  slider.addEventListener('input', () => { value.value = slider.value; });
 }
 
 function vote(event) {
@@ -192,7 +207,12 @@ function vote(event) {
       form.querySelector('[data-error]').textContent = 'Wybierz co najmniej jeden termin.';
       return false;
     }
-    event.votes[state.member] = selected;
+    const currentEvent = state.events.find(item => item.id === event.id);
+    if (!currentEvent?.votes[state.member] && (!currentEvent || isFull(currentEvent))) {
+      form.querySelector('[data-error]').textContent = 'Na tę aktywność nie ma już wolnych miejsc.';
+      return false;
+    }
+    currentEvent.votes[state.member] = selected;
     save('Zapisano dostępność.');
   });
 }
