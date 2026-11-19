@@ -21,6 +21,7 @@ test('profile demo codes are browser-bound, expire, and can only be used once', 
       const [object, key] = field(path);
       if (typeof expected !== 'object') return object?.[key] === expected;
       if ('$exists' in expected) return (object?.[key] !== undefined) === expected.$exists;
+      if ('$ne' in expected) return object?.[key] !== expected.$ne;
       return object?.[key] > expected.$gt;
     });
     if (!matched) return false;
@@ -72,6 +73,10 @@ test('profile demo codes are browser-bound, expire, and can only be used once', 
   const login = code => send('login', {email, code}, browser);
   let code = await requestCode();
   assert.equal((await send('login', {email, code})).status, 401);
+  profile.archived = true;
+  assert.equal((await send('requestLoginCode', {email}, browser)).status, 401);
+  assert.equal((await login(code)).status, 401);
+  delete profile.archived;
   profile.demoLogin.expiresAt = new Date(0);
   assert.equal((await login(code)).status, 401);
 
@@ -89,6 +94,9 @@ test('profile demo codes are browser-bound, expire, and can only be used once', 
 
   const oldCode = 'b'.repeat(64);
   profile.recovery = createHash('sha256').update('crewconnect-recovery:' + oldCode).digest('hex');
+  profile.archived = true;
+  assert.equal((await send('login', {code: oldCode})).status, 401);
+  delete profile.archived;
   assert.deepEqual(await (await send('login', {code: oldCode})).json(), snapshot);
   assert.equal((await send('login', {code: oldCode})).status, 401);
 });

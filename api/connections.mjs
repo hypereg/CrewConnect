@@ -36,6 +36,9 @@ export default async function connections(req, res) {
   const me = discoveryId(session);
   try {
     const db = await getDatabase();
+    if (await db.collection('workspaces').findOne({_id: session, archived: true}, {projection: {_id: 1}})) {
+      return send(res, 403, {error: 'Konto zostało wyłączone przez administratora.'});
+    }
     const profiles = db.collection('discovery_profiles');
     const matches = db.collection('discovery_matches');
     if (req.method === 'GET') {

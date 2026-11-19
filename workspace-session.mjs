@@ -19,6 +19,7 @@ export const workspaceId = req => readCookie(req, 'crew_workspace');
 export const workspaceCookie = id => cookie('crew_workspace', id, '/');
 const browserCookie = token => cookie(browserCookieName, token, '/api/workspace');
 const digest = value => createHash('sha256').update(value).digest('hex');
+export const recoveryDigest = code => digest('crewconnect-recovery:' + code);
 const codeDigest = (token, code) => createHmac('sha256', token).update(code).digest('hex');
 
 function loginEmail(value) {
@@ -31,7 +32,7 @@ function sendJson(res, data) {
 }
 
 async function completeLogin(res, store, filter) {
-  const account = await store.findOneAndUpdate(filter, {$unset: {recovery: '', demoLogin: ''}},
+  const account = await store.findOneAndUpdate({...filter, archived: {$ne: true}}, {$unset: {recovery: '', demoLogin: ''}},
     {projection: {_id: 1, snapshot: 1}});
   if (!account) return false;
   res.setHeader('Set-Cookie', [workspaceCookie(account._id), browserCookie('')]);
@@ -59,7 +60,7 @@ export async function accountSession(req, res, getStore) {
   }
 
   if (data?.action === 'login' && typeof data.code === 'string' && legacyCode.test(data.code) && !data.email) {
-    const recovery = digest('crewconnect-recovery:' + data.code);
+    const recovery = recoveryDigest(data.code);
     if (!await completeLogin(res, getStore(), {recovery})) return res.writeHead(401).end();
     return;
   }
@@ -70,7 +71,7 @@ export async function accountSession(req, res, getStore) {
     const id = workspaceId(req);
     if (!id) return res.writeHead(401).end();
     const token = randomBytes(32).toString('hex');
-    const result = await getStore().updateOne({_id: id, 'snapshot.userProfile.id': {$exists: true}},
+    const result = await getStore().updateOne({_id: id, archived: {$ne: true}, 'snapshot.userProfile.id': {$exists: true}},
       {$set: {demoLogin: {email, browser: digest(token)}}, $unset: {recovery: ''}});
     if (!result.matchedCount) return res.writeHead(409).end();
     res.setHeader('Set-Cookie', [workspaceCookie(''), browserCookie(token)]);
@@ -81,7 +82,7 @@ export async function accountSession(req, res, getStore) {
   const token = readCookie(req, browserCookieName);
   if (!token) return res.writeHead(401).end();
   const store = getStore();
-  const profile = {'demoLogin.email': email, 'demoLogin.browser': digest(token)};
+  const profile = {archived: {$ne: true}, 'demoLogin.email': email, 'demoLogin.browser': digest(token)};
   if (data.action === 'requestLoginCode') {
     const code = String(randomInt(1_000_000)).padStart(6, '0');
     const result = await store.updateOne(profile, {$set: {

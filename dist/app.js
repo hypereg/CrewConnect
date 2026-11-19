@@ -70,6 +70,11 @@ async function performWorkspaceSync() {
     let token = localStorage.getItem(tokenKey);
     const headers = () => token ? {Authorization: 'Bearer ' + token} : {};
     const response = await fetch(workspaceUrl, {cache: 'no-store', headers: headers()});
+    if (response.status === 403 && !apiBase) {
+      resetProfileSession();
+      announce('Konto jest niedostępne. Skontaktuj się z administratorem.');
+      return;
+    }
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return;
     const issuedToken = response.headers.get('X-Workspace-Token');
     if (issuedToken) {
@@ -592,6 +597,7 @@ function render() {
   const calendar = page === 'kalendarz';
   const discover = page === 'zaloga';
   const profile = page === 'profil';
+  const administration = page === 'administracja';
   const map = page === 'mapa';
   content.classList.toggle('map-content', map);
   document.querySelectorAll('[data-page]').forEach(link => {
@@ -741,7 +747,7 @@ function beginProfileLogin(email = '') {
     <label>Adres e-mail <input name="email" type="email" autocomplete="email" required maxlength="120"
       value="${escape(email)}" autofocus></label>
     <p class="muted">W wersji demo kod pojawi się w powiadomieniu na ekranie.</p>
-    <button type="button" class="secondary" data-legacy-login>Użyj wcześniej zapisanego kodu powrotu</button>`,
+    <button type="button" class="secondary" data-legacy-login>Użyj kodu powrotu lub kodu od administratora</button>`,
     'Pokaż kod demo', async (data, form) => {
       const address = data.get('email').trim();
       const response = await accountSession('requestLoginCode', {email: address});
@@ -763,8 +769,8 @@ function enterProfileCode(email, code) {
 }
 
 function beginLegacyLogin() {
-  openForm('Użyj kodu powrotu', `
-    <label>Zapisany kod powrotu <input name="code" required maxlength="64" autocomplete="off" spellcheck="false" autofocus></label>
+  openForm('Zaloguj się zapisanym kodem', `
+    <label>Kod dostępu <input name="code" required maxlength="64" autocomplete="off" spellcheck="false" autofocus></label>
     <button type="button" class="secondary" data-login-back>Wróć do adresu e-mail</button>`,
     'Zaloguj się', data => {
       const code = data.get('code').trim().toLowerCase();
@@ -772,6 +778,94 @@ function beginLegacyLogin() {
       return restoreProfile({code});
     });
   dialog.querySelector('[data-login-back]').onclick = () => beginProfileLogin();
+}
+
+let adminKey = '';
+let adminUsers = [];
+let newUserCode = '';
+
+async function adminRequest(payload, key = adminKey) {
+  const response = await fetch('api/users', {
+    method: payload ? 'POST' : 'GET',
+    headers: {Authorization: 'Bearer ' + key, ...(payload ? {'Content-Type': 'application/json'} : {})},
+    ...(payload ? {body: JSON.stringify(payload)} : {})
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'Panel jest chwilowo niedostępny.');
+  return result;
+}
+
+function renderUserAdministration() {
+  const heading = '<header class="crew-heading"><h1>Administracja użytkowników</h1></header>';
+  if (!adminKey) return heading + '<section class="card"><p>Odblokuj panel kluczem administratora.</p>' +
+    '<button class="primary" data-action="admin-unlock">Odblokuj panel</button></section>';
+  return heading + `
+    <div class="crew-filter"><button class="primary" data-action="admin-create">+ Dodaj użytkownika</button>
+      <button class="secondary" data-action="admin-lock">Zablokuj panel</button></div>
+    ${newUserCode ? `<section class="card"><h2>Kod logowania użytkownika</h2>
+      <p>Przekaż go prywatnie. Użytkownik wpisze go po wybraniu „Zaloguj się kodem”.</p>
+      <input aria-label="Jednorazowy kod logowania" value="${newUserCode}" readonly>
+      <button class="secondary" data-action="admin-dismiss-code">Ukryj kod</button></section>` : ''}
+    <div class="grid">${adminUsers.map(user => `<article class="card">
+      <p class="badge">${user.archived ? 'Konto wyłączone' : user.published ? 'Profil opublikowany' : 'Bez publicznej karty'}</p>
+      <h3>${escape(user.name)}</h3>${user.role ? `<p class="muted">${escape(user.role)}</p>` : ''}
+      <footer>${user.archived ? `<button class="primary" data-action="admin-restore" data-id="${user.id}">Przywróć konto</button>` :
+        `<button class="secondary" data-action="admin-${user.published ? 'hide' : 'publish'}" data-id="${user.id}">${user.published ? 'Ukryj kartę' : 'Opublikuj kartę'}</button>
+        <button class="secondary" data-action="admin-resetCode" data-id="${user.id}">Wydaj kod logowania</button>
+        <button class="secondary" data-action="admin-archive" data-id="${user.id}">Usuń z aktywnych</button>`}</footer></article>`).join('') ||
+      '<p>Brak użytkowników.</p>'}</div>`;
+}
+
+async function handleUserAdministration(action, id) {
+  if (action === 'admin-unlock') {
+    openForm('Dostęp administratora',
+      '<label>Klucz administratora <input type="password" name="key" required maxlength="64" autocomplete="off"></label>',
+      'Odblokuj', async data => {
+        const key = data.get('key').trim();
+        const result = await adminRequest(null, key);
+        adminKey = key;
+        adminUsers = result.users;
+        render();
+      });
+    return;
+  }
+  if (!adminKey) return;
+  if (action === 'admin-create') {
+    openForm('Dodaj użytkownika', '<label>Nazwa <input name="name" required maxlength="80"></label>' +
+      '<label>Rola na pokładzie <input name="role" maxlength="60"></label>', 'Dodaj konto', async data => {
+        const result = await adminRequest({action: 'create', name: data.get('name'), role: data.get('role')});
+        newUserCode = result.code;
+        adminUsers = (await adminRequest()).users;
+        render();
+      });
+    return;
+  }
+  if (action === 'admin-lock') {
+    adminKey = '';
+    adminUsers = [];
+    newUserCode = '';
+    render();
+    return;
+  }
+  if (action === 'admin-dismiss-code') {
+    newUserCode = '';
+    render();
+    return;
+  }
+  const operation = action.slice('admin-'.length);
+  const questions = {archive: 'Wyłączyć to konto i ukryć jego kartę? Rozmowy zostaną w bazie.',
+    publish: 'Opublikować kartę tej osoby w „Poznaj załogę”? Zrób to tylko za jej zgodą.',
+    resetCode: 'Wydać nowy kod logowania? Dotychczasowy niewykorzystany kod przestanie działać.'};
+  if (questions[operation] && !window.confirm(questions[operation])) return;
+  try {
+    const result = await adminRequest({action: operation, id});
+    if (result.code) newUserCode = result.code;
+    adminUsers = (await adminRequest()).users;
+    render();
+    announce('Zapisano zmianę konta.');
+  } catch (error) {
+    announce(error.message);
+  }
 }
 
 function editUserProfile(publishOnline = false) {
@@ -903,6 +997,10 @@ content.addEventListener('click', e => {
   const button = e.target.closest('button[data-action]');
   if (!button) return;
   const {action, id} = button.dataset;
+  if (action.startsWith('admin-')) {
+    void handleUserAdministration(action, id);
+    return;
+  }
   if (action === 'online-profile-edit') {
     editUserProfile(true);
     return;

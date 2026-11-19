@@ -112,12 +112,12 @@ export function createDutyApi(db, {CREW_PASSWORD, NVIDIA_API_KEY, FRONTEND_ORIGI
     if (!token || !/^[a-f0-9]{64}$/.test(token)) return fail('Otwórz swój profil i spróbuj ponownie.', 403);
     const directory = db.collection('workspaces');
     const profileFields = {projection: {'snapshot.userProfile.id': 1, 'snapshot.userProfile.name': 1}};
-    const workspace = await directory.findOne({_id: token}, profileFields);
+    const workspace = await directory.findOne({_id: token, archived: {$ne: true}}, profileFields);
     if (!workspace?.snapshot?.userProfile) return fail('Zapisz swój profil przed użyciem harmonogramu.', 403);
     const user = dutyMember(workspace);
     let members = [];
     if (isSchedule || path === '/api/duties') {
-      const profiles = await directory.find({'snapshot.userProfile.id': {$exists: true}}, profileFields).toArray();
+      const profiles = await directory.find({archived: {$ne: true}, 'snapshot.userProfile.id': {$exists: true}}), profileFields).toArray();
       members = profiles.map(dutyMember);
     }
     if (isSchedule) return snapshot(duties, reports, members, user, voiceEnabled);
