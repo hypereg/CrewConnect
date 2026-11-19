@@ -19,7 +19,6 @@ const crewProfiles = [
     bio: 'Najchętniej spędzam wolny wieczór przy grze kooperacyjnej.', interests: ['Gry kooperacyjne', 'Łamigłówki']},
   {name: 'Zofia Król', gender: 'women', role: 'Kadetka pokładowa', initials: 'ZK', color: 'teal',
     bio: 'Uczę się hiszpańskiego i chętnie poćwiczę konwersację przy herbacie.', interests: ['Hiszpański', 'Herbata']},
-  ...addedCrewProfiles
 ];
 const crew = crewProfiles.map(profile => profile.name);
 const genderFilters = {all: 'Wszystkich', women: 'Kobiety', men: 'Mężczyzn'};
@@ -285,7 +284,7 @@ function renderUserProfile() {
 }
 
 function renderCrew() {
-  const choices = state.crewChoices?.[state.member] ?? {};
+  const choices = state.crewConnections?.[state.member] ?? {};
   const others = currentRoster().filter(profile => profileId(profile) !== state.member);
   const matches = others.filter(profile => isCrewMatch(profileId(profile)));
   const visibleProfiles = others.filter(matchesDiscoveryFilters);
@@ -332,8 +331,8 @@ function renderCrew() {
 }
 
 function isCrewMatch(profile, memberId = state.member) {
-  return profile !== memberId && state.crewChoices?.[memberId]?.[profile] === 'connect' &&
-    state.crewChoices?.[profile]?.[memberId] === 'connect';
+  return profile !== memberId && state.crewConnections?.[memberId]?.[profile] === 'connect' &&
+    state.crewConnections?.[profile]?.[memberId] === 'connect';
 }
 
 const conversationKey = (first, second) => JSON.stringify([first, second].sort());
@@ -409,9 +408,9 @@ function openCrewChat(profile, celebrate = false) {
 
 function chooseCrewProfile(profile, choice) {
   if (profile === state.member || !isWorkspaceMember(profile)) return;
-  if (!state.crewChoices) state.crewChoices = {};
-  if (!state.crewChoices[state.member]) state.crewChoices[state.member] = {};
-  const choices = state.crewChoices[state.member];
+  if (!state.crewConnections) state.crewConnections = {};
+  if (!state.crewConnections[state.member]) state.crewConnections[state.member] = {};
+  const choices = state.crewConnections[state.member];
   if (choices[profile]) return;
   choices[profile] = choice;
   const matched = isCrewMatch(profile);
@@ -615,7 +614,7 @@ content.addEventListener('click', e => {
     return;
   }
   if (action === 'crew-revisit') {
-    const choices = state.crewChoices[state.member];
+    const choices = state.crewConnections[state.member];
     for (const profile of currentRoster().filter(matchesDiscoveryFilters)) {
       const key = profileId(profile);
       if (choices[key] === 'skip') delete choices[key];
