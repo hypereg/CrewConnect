@@ -248,6 +248,8 @@
 @media(max-width:680px){.crew-layout{grid-template-columns:minmax(0,1fr);gap:12px}}
 @media(prefers-reduced-motion:reduce){.swipe-card,.swipe-choice-icon{transition:none}}
 
+.swipe-example{position:absolute;bottom:12px;left:16px;padding:5px 9px;border-radius:6px;background:#101c2df0;color:white;font-size:13px;font-weight:650}
+
 .sidebar-profile-link{display:flex;align-items:center;min-height:44px;padding:8px 12px;border-radius:9px;color:#b8cada;font-size:14px;font-weight:650;text-decoration:none}
 .sidebar-profile-link:hover{background:#1b3347;color:white}
 .sidebar-profile-link[aria-current]{background:#214453;color:#b2f5ea;box-shadow:inset 3px 0 #7ee9d5}

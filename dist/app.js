@@ -144,15 +144,9 @@ const escape = value => String(value).replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 }[char]));
 const profileId = profile => profile.id ?? profile.name;
-const isWorkspaceMember = id => crew.includes(id) || (typeof id === 'string' && id === state.userProfile?.id);
 const initials = name => name.split(/\s+/u).slice(0, 2).map(part => [...part][0]).join('').toLocaleUpperCase('pl');
 const personalName = id => state.userProfile?.id === id ? state.userProfile?.name : undefined;
 const displayName = (id, names) => personalName(id) ?? (names && Object.hasOwn(names, id) ? names[id] : id);
-
-function currentRoster() {
-  const profile = state.userProfile;
-  return profile ? [{...profile, color: 'teal', initials: initials(profile.name)}, ...crewProfiles] : crewProfiles;
-}
 
 function renderMemberSelector() {
   const profile = state.userProfile;
@@ -331,11 +325,12 @@ function renderDiscoveryCard(profile, commonInterests) {
   return `<div class="swipe-deck">
     <article class="crew-card swipe-card" id="crew-card" data-profile="${id}">
       <div class="crew-portrait ${profile.color || 'plum'}">
+        ${profile.example ? '<span class="swipe-example">Profil przykładowy</span>' : ''}
         <span class="swipe-initials" aria-hidden="true">${escape(profile.initials || initials(profile.name))}</span>
         <strong class="swipe-stamp swipe-like" aria-hidden="true">Chcę poznać</strong>
         <strong class="swipe-stamp swipe-pass" aria-hidden="true">Pomijam</strong>
       </div>
-      <div class="crew-details">${profileDetails(profile, commonInterests)}</div>
+      <div class="crew-details">${profileDetails(profile, commonInterests)}${profile.example ? '<p class="muted">Ta karta służy do wypróbowania gestów i nie odpowiada na wiadomości.</p>' : ''}</div>
     </article>
   </div>
   <div class="crew-actions swipe-actions" aria-label="Wybierz reakcję">
@@ -349,13 +344,14 @@ function renderDiscoveryCard(profile, commonInterests) {
 
 function renderOnlineDiscovery() {
   const heading = '<header class="crew-heading"><h1>Poznaj załogę online</h1>' +
-    '<button class="secondary" data-action="online-reset">Usuń historię dopasowań</button></header>';
+    '<div class="crew-filter"><button class="primary" data-action="online-profile-edit">Edytuj mój profil</button>' +
+    '<button class="secondary" data-action="online-reset">Usuń historię dopasowań</button></div></header>';
   const error = onlineError ? `<p class="form-error" role="status">${escape(onlineError)}</p>` : '';
   if (!onlineDiscovery) return heading + (error || '<p>Ładowanie profili online…</p>');
   if (!onlineDiscovery.published) return heading + `<div class="card"><h2>Opublikuj swój profil</h2>
     <p>Osoby korzystające z CrewConnect zobaczą Twoją nazwę, opis, zainteresowania i intencje. Czat otwiera się po obustronnym polubieniu.</p>
     <button class="primary" data-action="online-publish">Opublikuj profil</button></div>${error}`;
-  const profiles = onlineDiscovery.profiles;
+  const profiles = [...onlineDiscovery.profiles].sort((first, second) => Boolean(first.example) - Boolean(second.example));
   const filters = discoveryFilters();
   const options = values => Object.entries(values).map(([value, label]) =>
     `<option value="${value}" ${filters.intent === value ? 'selected' : ''}>${label}</option>`).join('');
@@ -408,64 +404,21 @@ async function updateOnlineDiscovery(payload, message) {
 
 function renderCrew() {
   if (personalDiscovery()) return renderOnlineDiscovery();
-  const choices = state.crewConnections?.[state.member] ?? {};
-  const others = currentRoster().filter(profile => profileId(profile) !== state.member);
-  const matches = others.filter(profile => isCrewMatch(profileId(profile)));
-  const visibleProfiles = others.filter(matchesDiscoveryFilters);
-  const myInterests = currentRoster().find(profile => profileId(profile) === state.member)?.interests ?? [];
-  const shared = profile => profile.interests.map(interestKey).filter(interest => myInterests.some(item => interestKey(item) === interest));
-  const available = visibleProfiles.filter(profile => !choices[profileId(profile)]);
-  const candidate = available.sort((a, b) => shared(b).length - shared(a).length)[0];
-  const interestOptions = new Map(others.flatMap(profile => profile.interests.map(item => [interestKey(item), item])));
-  const filters = discoveryFilters();
-  const option = (value, label, selected) => `<option value="${escape(value)}" ${value === selected ? 'selected' : ''}>${escape(label)}</option>`;
-  const card = candidate ? renderDiscoveryCard(candidate, shared(candidate)) : `
-    <div class="card crew-empty"><h2>Brak nowych kart w tym widoku</h2>
-    ${visibleProfiles.some(profile => choices[profileId(profile)] === 'skip') ? '<button class="secondary" data-action="crew-revisit">Pokaż pominięte osoby</button>' : ''}</div>`;
-  return `<header class="crew-heading"><h1>Poznaj załogę</h1><p class="muted">Znajdź osoby, z którymi chcesz spędzić czas po wachcie.</p>
-    <div class="crew-filter">
-      ${state.userProfile ? '<button class="primary" data-action="go-online">Przejdź do mojego profilu online</button>' : '<a class="primary" href="#profil">Utwórz własny profil</a>'}
-      <button class="secondary" data-action="demo-reset">Usuń historię dopasowań</button>
-    </div><p class="muted">Oglądasz profile demo. Aby dopasować się ze znajomym na innym urządzeniu, oboje wybierzcie i opublikujcie własny profil.</p></header>
-    <div class="crew-filter"><label for="crew-gender">Kogo chcesz poznawać?</label>
-      <select id="crew-gender">${Object.entries(genderFilters).map(([value, label]) =>
-        `<option value="${value}" ${preferredGender() === value ? 'selected' : ''}>${label}</option>`).join('')}</select>
-      <label for="crew-intent">Intencje</label><select id="crew-intent">
-        <option value="">Dowolne</option>
-        ${Object.entries(datingIntents).map(([value, label]) => option(value, label, filters.intent)).join('')}
-      </select>
-      <label for="crew-interest">Zainteresowanie</label><select id="crew-interest">
-        <option value="">Dowolne</option>
-        ${[...interestOptions].sort((a, b) => a[1].localeCompare(b[1], 'pl')).map(([value, label]) => option(value, label, filters.interest)).join('')}
-      </select>
-    </div>
-    <div class="crew-layout"><section aria-label="Profile załogi">${card}</section>
-      <aside class="card crew-matches"><h2>Dopasowania</h2>
-        ${matches.length ? matches.map(profile => `<div class="crew-match">
-          <span class="crew-avatar ${profile.color}" aria-hidden="true">${escape(profile.initials)}</span>
-          <div><strong>${escape(profile.name)}</strong>${profile.role ? `<p class="muted">${escape(profile.role)}</p>` : ''}</div>
-          <button class="secondary" data-action="crew-chat" data-profile="${escape(profileId(profile))}" aria-label="Otwórz czat z ${escape(profile.name)}">Czat</button>
-        </div>`).join('') : '<p class="muted">Dopasowanie pojawi się, gdy obie osoby wybiorą „Chcę poznać”.</p>'}
-      </aside></div>`;
+  return `<header class="crew-heading"><h1>Poznaj załogę online</h1></header>
+    <section class="card crew-empty"><h2>${state.userProfile ? 'Wybierz swój profil' : 'Dołącz do załogi online'}</h2>
+      <p>Własny profil pozwoli Ci poznawać osoby na innych urządzeniach i pisać po dopasowaniu.</p>
+      ${state.userProfile ? '<button class="primary" data-action="go-online">Użyj mojego profilu online</button>' :
+        '<button class="primary" data-action="online-profile-edit">+ Dodaj nowy profil</button>'}
+    </section>`;
 }
 
-function isCrewMatch(profile, memberId = state.member) {
-  return profile !== memberId && state.crewConnections?.[memberId]?.[profile] === 'connect' &&
-    state.crewConnections?.[profile]?.[memberId] === 'connect';
-}
-
-const conversationKey = (first, second) => JSON.stringify([first, second].sort());
 const chatTime = new Intl.DateTimeFormat('pl-PL', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
 
 function openCrewChat(profile, celebrate = false) {
-  const sender = state.member;
-  const online = personalDiscovery() && onlineDiscovery?.matches.includes(profile);
-  if (dialog.open || (!online && (!isWorkspaceMember(profile) || !isCrewMatch(profile, sender)))) return;
-  const key = conversationKey(sender, profile);
-  const peerName = online ? onlinePeer(profile)?.name : displayName(profile);
-  if (!peerName) return;
+  const peerName = onlinePeer(profile)?.name;
+  if (!personalDiscovery() || !onlineDiscovery?.matches.includes(profile) || !peerName || dialog.open) return;
   const name = escape(peerName);
-  const author = online ? onlineDiscovery.me : sender;
+  const author = onlineDiscovery.me;
   dialog.classList.add('crew-chat-dialog');
   dialog.innerHTML = `
     <div class="dialog-head"><h2 id="dialog-title">${celebrate ? 'Macie dopasowanie!' : 'Czat z ' + name}</h2>
@@ -489,7 +442,7 @@ function openCrewChat(profile, celebrate = false) {
   const input = form.elements.message;
   let remoteMessages = [];
   function renderMessages() {
-    const messages = online ? remoteMessages : state.crewChats?.[key] ?? [];
+    const messages = remoteMessages;
     history.innerHTML = messages.map(message => `
       <article class="chat-message${message.sender === author ? ' own' : ''}">
         <span class="chat-meta">${message.sender === author ? 'Ty' : name} · ${chatTime.format(new Date(message.at))}</span>
@@ -507,7 +460,7 @@ function openCrewChat(profile, celebrate = false) {
   };
   let chatLoading = false;
   async function reloadMessages() {
-    if (!online || chatLoading || !dialog.open || !form.isConnected) return;
+    if (chatLoading || !dialog.open || !form.isConnected) return;
     chatLoading = true;
     try {
       const {messages} = await discoveryRequest(null, profile);
@@ -521,73 +474,44 @@ function openCrewChat(profile, celebrate = false) {
       chatLoading = false;
     }
   }
-  const pollChat = online ? setInterval(reloadMessages, 3000) : undefined;
+  const pollChat = setInterval(reloadMessages, 3000);
   form.onsubmit = async event => {
     event.preventDefault();
     const text = input.value.trim();
-    if (online) {
-      const submit = form.querySelector('[type=submit]');
-      if (!text || text.length > 500 || submit.disabled) return;
-      submit.disabled = true;
-      try {
-        await discoveryRequest({action: 'message', peer: profile, text});
-        input.value = '';
-        await reloadMessages();
-      } catch (error) {
-        announce(error.message);
-      } finally {
-        submit.disabled = false;
-        input.focus();
-      }
-      return;
+    const submit = form.querySelector('[type=submit]');
+    if (!text || text.length > 500 || submit.disabled) return;
+    submit.disabled = true;
+    try {
+      await discoveryRequest({action: 'message', peer: profile, text});
+      input.value = '';
+      await reloadMessages();
+    } catch (error) {
+      announce(error.message);
+    } finally {
+      submit.disabled = false;
+      input.focus();
     }
-    if (!text || text.length > 500 || state.member !== sender || !isCrewMatch(profile, sender)) return;
-    if (!state.crewChats) state.crewChats = {};
-    const messages = state.crewChats[key] ?? [];
-    state.crewChats[key] = [...messages, {sender, text, at: new Date().toISOString()}];
-    save();
-    input.value = '';
-    renderMessages();
-    input.focus();
   };
   dialog.querySelector('[data-start-chat]').onclick = showChat;
-  const refresh = event => { if (event.key === storageKey && dialog.open && form.isConnected) renderMessages(); };
-  window.addEventListener('storage', refresh);
   dialog.addEventListener('close', () => {
-    window.removeEventListener('storage', refresh);
     clearInterval(pollChat);
     dialog.classList.remove('crew-chat-dialog');
     [...content.querySelectorAll('[data-action="crew-chat"]')].find(button => button.dataset.profile === profile)?.focus();
   }, {once: true});
   dialog.showModal();
-  if (online) void reloadMessages();
+  void reloadMessages();
   if (celebrate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) setTimeout(showChat, 1500);
   else showChat();
 }
 
 function chooseCrewProfile(profile, choice) {
-  if (personalDiscovery() && onlinePeer(profile)) {
-    if (choice === 'connect') void updateOnlineDiscovery({action: 'like', peer: profile});
-    else {
-      skippedOnline.add(profile);
-      onlineSearch = '';
-      render();
-    }
-    return;
+  if (!personalDiscovery() || !onlinePeer(profile)) return;
+  if (choice === 'connect') void updateOnlineDiscovery({action: 'like', peer: profile});
+  else {
+    skippedOnline.add(profile);
+    onlineSearch = '';
+    render();
   }
-  if (profile === state.member || !isWorkspaceMember(profile)) return;
-  if (!state.crewConnections) state.crewConnections = {};
-  if (!state.crewConnections[state.member]) state.crewConnections[state.member] = {};
-  const choices = state.crewConnections[state.member];
-  if (choices[profile]) return;
-  choices[profile] = choice;
-  const matched = isCrewMatch(profile);
-  save(matched ? 'Nowe dopasowanie: ' + displayName(profile) : choice === 'connect' ? 'Zapisano zainteresowanie.' : 'Pominięto profil.');
-  if (matched) {
-    openCrewChat(profile, true);
-    return;
-  }
-  (content.querySelector('[data-action="crew-skip"], [data-action="crew-revisit"]') || content.querySelector('h1'))?.focus();
 }
 
 function render() {
@@ -665,9 +589,9 @@ function openForm(name, fields, submitLabel, onSubmit) {
   dialog.showModal();
 }
 
-function editUserProfile() {
+function editUserProfile(publishOnline = false) {
   const profile = state.userProfile;
-  openForm(profile ? 'Edytuj profil' : 'Utwórz profil', `
+  openForm(profile ? 'Edytuj profil' : 'Dodaj nowy profil', `
     <label>Nazwa wyświetlana <input name="displayName" required maxlength="80" autocomplete="nickname" value="${escape(profile?.name ?? '')}" autofocus></label>
     <label>Rola na pokładzie <input name="role" maxlength="60" value="${escape(profile?.role ?? '')}"></label>
     <label>Płeć (opcjonalnie) <select name="gender"><option value="">Nie podaję</option>
@@ -680,7 +604,9 @@ function editUserProfile() {
     <label>Czego szukasz? <select name="intent"><option value="">Wybierz opcjonalnie</option>
       ${Object.entries(datingIntents).map(([value, label]) => `<option value="${value}" ${profile?.intent === value ? 'selected' : ''}>${label}</option>`).join('')}
     </select></label>
-    <label>Pytanie na przełamanie lodów <input name="icebreaker" maxlength="120" placeholder="Np. Jaki port chcesz odwiedzić ponownie?" value="${escape(profile?.icebreaker ?? '')}"></label>`, 'Zapisz profil', (data, form) => {
+    <label>Pytanie na przełamanie lodów <input name="icebreaker" maxlength="120" placeholder="Np. Jaki port chcesz odwiedzić ponownie?" value="${escape(profile?.icebreaker ?? '')}"></label>
+    ${publishOnline ? '<p class="muted">Zapis opublikuje dane z formularza w „Poznaj załogę”.</p>' : ''}`,
+    publishOnline ? 'Zapisz i opublikuj' : 'Zapisz profil', async (data, form) => {
     const name = data.get('displayName').trim().replace(/\s+/gu, ' ');
     const role = data.get('role').trim();
     const bio = data.get('bio').trim();
@@ -695,10 +621,19 @@ function editUserProfile() {
     }
     const existing = state.userProfile;
     const id = existing?.id ?? 'profile-' + crypto.randomUUID();
-    state.userProfile = {id, name, role, bio, interests, intent: data.get('intent'),
+    const updatedProfile = {id, name, role, bio, interests, intent: data.get('intent'),
       gender: data.get('gender'), icebreaker: data.get('icebreaker').trim()};
-    if (!existing) state.member = id;
+    if (publishOnline) {
+      await syncWorkspace();
+      await discoveryRequest({action: 'publish', profile: updatedProfile});
+    }
+    state.userProfile = updatedProfile;
+    if (!existing || publishOnline) state.member = id;
     save('Zapisano profil.');
+    if (publishOnline) {
+      updateNetwork();
+      void refreshDiscovery();
+    }
   });
   dialog.addEventListener('close', () => {
     content.querySelector('[data-action="profile-edit"]')?.focus();
@@ -781,6 +716,10 @@ content.addEventListener('click', e => {
   const button = e.target.closest('button[data-action]');
   if (!button) return;
   const {action, id} = button.dataset;
+  if (action === 'online-profile-edit') {
+    editUserProfile(true);
+    return;
+  }
   if (action === 'profile-edit') {
     editUserProfile();
     return;
@@ -813,14 +752,6 @@ content.addEventListener('click', e => {
     void updateOnlineDiscovery({action: 'hide'}, 'Profil ukryty.');
     return;
   }
-  if (action === 'demo-reset' && !personalDiscovery()) {
-    if (window.confirm('Usunąć polubienia, pominięcia i dopasowania aktywnego profilu demo? Wiadomości zostaną zachowane.')) {
-      delete state.crewConnections?.[state.member];
-      save('Usunięto historię dopasowań profilu demo.');
-      content.querySelector('[data-action="demo-reset"]')?.focus();
-    }
-    return;
-  }
   if (action === 'online-reset' && personalDiscovery()) {
     if (window.confirm('Usunąć wszystkie Twoje polubienia i dopasowania? Wiadomości zostaną zachowane.')) {
       skippedOnline.clear();
@@ -839,16 +770,6 @@ content.addEventListener('click', e => {
   }
   if (action === 'crew-skip' || action === 'crew-connect') {
     void reactToCrewCard(button.dataset.profile, action === 'crew-connect' ? 'connect' : 'skip');
-    return;
-  }
-  if (action === 'crew-revisit') {
-    const choices = state.crewConnections[state.member];
-    for (const profile of currentRoster().filter(matchesDiscoveryFilters)) {
-      const key = profileId(profile);
-      if (choices[key] === 'skip') delete choices[key];
-    }
-    save('Ponownie wyświetlono pominięte profile.');
-    content.querySelector('[data-action="crew-skip"]')?.focus();
     return;
   }
   const event = allEvents().find(item => item.id === id);
