@@ -1,7 +1,6 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import events from './api/events.mjs';
-import notifications from './api/notifications.mjs';
 import statistics from './api/statistics.mjs';
 import restaurants from './api/restaurants.mjs';
 import places from './api/places.mjs';
@@ -46,7 +45,7 @@ createServer(async (req, res) => {
     if (path === '/api/places') return await places(req, res);
     if (path === '/api/connections') return await connections(req, res);
     if (path === '/api/users') return await users(req, res);
-    if (path === '/api/notifications') return await notifications(req, res);
+    if (path === '/api/notifications') return await workspace(req, res);
     if (path === '/api/statistics') return await statistics(req, res);
     if (path === '/api/restaurants') return await restaurants(req, res);
     if (path === '/api/workspace') return await workspace(req, res);

@@ -1,6 +1,6 @@
 import {MongoClient} from 'mongodb';
-import {workspaceId} from '../workspace-session.mjs';
-import {discoveryId} from '../discovery-profile.mjs';
+import {workspaceId} from './workspace-session.mjs';
+import {discoveryId} from './discovery-profile.mjs';
 
 const {MONGODB_URI, MONGODB_DATABASE = 'crewconnect'} = process.env;
 const limit = 50;

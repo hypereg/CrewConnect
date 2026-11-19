@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import notifications from '../notification-http.mjs';
 import { MongoClient } from 'mongodb';
 import { discoveryId, discoveryFields } from '../discovery-profile.mjs';
 import { accountSession, workspaceCookie, workspaceId } from '../workspace-session.mjs';
@@ -30,6 +31,10 @@ export function validProfile(profile) {
 }
 
 export default async function workspace(req, res) {
+  const url = new URL(req.url, 'http://localhost');
+  if (url.pathname === '/api/notifications' || url.searchParams.get('resource') === 'notifications') {
+    return notifications(req, res);
+  }
   try {
     const browserOrigin = req.headers.origin;
     const crossOrigin = Boolean(FRONTEND_ORIGIN && browserOrigin === FRONTEND_ORIGIN);
