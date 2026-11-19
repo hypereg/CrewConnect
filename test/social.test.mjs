@@ -73,6 +73,7 @@ test('shared cruise workflow enforces cabin capacity, event limits and role owne
   const eventFields = {title: 'Planszówki', place: 'Mesa', category: 'Gry', localTime: future(3), capacity: 1};
   const draft = (await planner('saveEvent', {...eventFields, publish: false})).events[0];
   assert.equal(draft.status, 'draft');
+  assert.equal(draft.source, 'program');
   assert.deepEqual((await guest()).events, []);
   await guest('saveEvent', {...eventFields, publish: true}, 403);
   const event = (await planner('saveEvent', {...eventFields, id: draft.id, revision: draft.revision, publish: true})).events[0];
@@ -91,6 +92,38 @@ test('shared cruise workflow enforces cabin capacity, event limits and role owne
   await planner('cancelEvent', {id: event.id});
   assert.equal((await winner()).events[0].status, 'cancelled');
   assert.deepEqual((await loser()).events, []);
+
+  const meetingFields = {title: 'Kawa i rozmowy', placeId: 'cafe-promenade', category: 'Integracja', localTime: future(5)};
+  await guestA('saveGuestEvent', {...meetingFields, placeId: 'wymyślone-miejsce'}, 400);
+  await planner('saveGuestEvent', meetingFields, 403);
+  const creations = await Promise.allSettled([
+    guestA('saveGuestEvent', {...meetingFields, publish: false, place: 'Ignorowane', capacity: 1}),
+    guestA('saveGuestEvent', meetingFields)
+  ]);
+  const published = creations.filter(item => item.status === 'fulfilled');
+  assert.equal(published.length, 1);
+  const meetingId = published[0].value.eventId;
+  const meeting = published[0].value.events.find(item => item.id === meetingId);
+  assert.deepEqual([meeting.source, meeting.status, meeting.place, meeting.deck, meeting.capacity, meeting.joined],
+    ['guest', 'published', 'Café Promenade', 5, null, true]);
+  await guestA('saveGuestEvent', meetingFields, 409);
+  await guest('saveGuestEvent', {...meetingFields, id: meetingId, revision: meeting.revision}, 403);
+  await planner('saveEvent', {...eventFields, id: meetingId, revision: meeting.revision, publish: true}, 403);
+  const joined = (await guest('join', {id: meetingId})).events.find(item => item.id === meetingId);
+  assert.equal(joined.joined, true);
+  assert.equal(joined.count, 2);
+  assert.equal(joined.attendees, undefined);
+  const editFields = {...meetingFields, id: meetingId, revision: meeting.revision, placeId: 'sorrentos'};
+  const edited = (await guestA('saveGuestEvent', editFields)).events.find(item => item.id === meetingId);
+  assert.deepEqual(edited.changes, ['miejsce']);
+  assert.deepEqual(edited.attendees, ['Ala', guestName]);
+  await guestA('saveGuestEvent', editFields, 409);
+  await guest('cancelEvent', {id: meetingId}, 403);
+  await guestA('cancelEvent', {id: meetingId});
+  assert.equal((await guest()).events.find(item => item.id === meetingId).status, 'cancelled');
+  const replacement = await guestA('saveGuestEvent', meetingFields);
+  await admin('cancelEvent', {id: replacement.eventId});
+  assert.equal((await guestA()).events.find(item => item.id === replacement.eventId).status, 'cancelled');
 
   const ala = await guestA('profile', {name: 'Ala', bio: 'Lubię gry', interests: 'Planszówki', visible: true});
   const guestProfile = await guest('profile', {name: guestName, visible: true});

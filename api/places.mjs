@@ -39,6 +39,10 @@ function publicCatalog({places, revision}) {
   return {places, revision, storage: 'database', editable: Boolean(adminHash)};
 }
 
+export async function sharedPlaces() {
+  return MONGODB_URI ? (await readCatalog(await catalogCollection())).places : DEFAULT_PLACES;
+}
+
 function isAdmin(req) {
   const token = req.headers.authorization?.match(/^Basic ([\w+/=]{1,4096})$/i)?.[1];
   if (!token || !adminHash) return false;
