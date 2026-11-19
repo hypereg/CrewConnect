@@ -14,6 +14,7 @@ const logoutKey = 'crewconnect-social-logged-out';
 const endpoint = '/api/social';
 const apiBase = document.querySelector('meta[name="crewconnect-api"]').content;
 const categories = ['Gry', 'Trening', 'Integracja', 'Inne'];
+const eventSources = {program: 'Program rejsu', guest: 'Spotkania gości'};
 const categoryIcons = {Gry: 'gamepad', Trening: 'activity', Integracja: 'users', Inne: 'star'};
 const icons = {
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
@@ -116,6 +117,7 @@ const upcoming = () => activeEvents().filter(event => event.status === 'publishe
 const eventById = id => board.events?.find(event => event.id === id);
 const previewDate = value => new Intl.DateTimeFormat('pl-PL', {timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long'})
   .format(new Date(value + 'T12:00Z'));
+const sourceOf = event => event.source === 'guest' ? 'guest' : 'program';
 
 function announce(message) {
   clearTimeout(noticeTimer);
@@ -227,13 +229,17 @@ function availability(event) {
   return remaining > 0 ? 'Wolne miejsca: ' + remaining + ' / ' + event.capacity : 'Brak wolnych miejsc';
 }
 
+const sourceBadge = source => '<span class="source-badge source-' + source + '">' + eventSources[source] + '</span>';
+const placeLabel = event => escape(event.place) + (event.deck ? ' · pokład ' + escape(event.deck) : '');
+
 function eventCard(event, panel = false) {
   const group = categories.indexOf(event.category);
-  return '<article class="surface event-card"><div class="event-card-top"><span class="event-category category-' + group + '">' +
-    icon(categoryIcons[event.category]) + escape(event.category) + '</span>' + eventBadge(event) + '</div>' +
-    '<h2><a href="#wydarzenie/' + escape(event.id) + '">' + escape(event.title) + '</a></h2>' +
+  return '<article class="surface event-card source-' + sourceOf(event) + '"><div class="event-card-top">' +
+    sourceBadge(sourceOf(event)) + eventBadge(event) + '</div>' +
+    '<h3><a href="#wydarzenie/' + escape(event.id) + '">' + escape(event.title) + '</a></h3>' +
     '<div class="event-meta"><span>' + icon('calendar') + '<time datetime="' + escape(event.startsAt) + '">' + eventDate(event) + ', ' + eventTime(event) + '</time></span>' +
-    '<span>' + icon('pin') + escape(event.place) + '</span></div>' +
+    '<span>' + icon('pin') + placeLabel(event) + '</span></div>' +
+    '<span class="event-category category-' + group + '">' + icon(categoryIcons[event.category]) + escape(event.category) + '</span>' +
     '<footer><span>' + escape(availability(event)) + '</span><a class="text-link" href="#' +
     (panel && event.status === 'draft' && event.voyageId === board.voyage?.id ? 'edytuj/' : 'wydarzenie/') +
     escape(event.id) + '">' + (panel && event.status === 'draft' && event.voyageId === board.voyage?.id ? 'Edytuj' : 'Szczegóły') +
@@ -241,6 +247,15 @@ function eventCard(event, panel = false) {
 }
 
 const eventGrid = (events, panel = false) => '<div class="event-grid">' + events.map(event => eventCard(event, panel)).join('') + '</div>';
+
+function eventSections(events, panel = false) {
+  return Object.entries(eventSources).map(([source, label]) => {
+    const items = events.filter(event => sourceOf(event) === source);
+    return '<section class="event-section" aria-labelledby="event-section-' + source + '"><h2 id="event-section-' + source + '">' +
+      label + '</h2>' + (items.length ? eventGrid(items, panel) : '<p class="surface section-empty">' +
+        (source === 'guest' ? 'Brak spotkań gości.' : 'Brak wydarzeń w programie.') + '</p>') + '</section>';
+  }).join('');
+}
 
 function todayDate() {
   return new Intl.DateTimeFormat('sv-SE', {
@@ -291,11 +306,7 @@ function renderCalendar() {
 }
 
 function renderEvents() {
-  const events = upcoming();
-  return renderHeading('Wydarzenia', 'Spotkania i aktywności na pokładzie') +
-    '<h2 class="section-title">Nadchodzące</h2>' +
-    (events.length ? eventGrid(events) :
-      empty('Na razie bez wydarzeń', 'Opublikowane wydarzenia pojawią się na tej liście.'));
+  return renderHeading('Wydarzenia', 'Nadchodzące aktywności na pokładzie') + eventSections(upcoming());
 }
 
 function renderBookings() {
@@ -469,7 +480,8 @@ function renderAdmin() {
       (adminTab === 'voyages' ? adminVoyages() : adminTab === 'accounts' ? adminAccounts() :
         (archive ? '<div class="toolbar"><h2>' + escape(archive.name) + ' · Archiwum</h2>' +
           button('Aktywny rejs', 'archive', '', '', 'secondary') + '</div>' : '') +
-        adminEvents(archive ? board.events.filter(event => event.voyageId === archive.id) : activeEvents())));
+        eventSections((archive ? board.events.filter(event => event.voyageId === archive.id) : activeEvents())
+          .sort((a, b) => b.startsAt.localeCompare(a.startsAt)), true)));
 }
 
 function render(focus = false) {
