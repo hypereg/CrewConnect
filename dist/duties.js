@@ -1,6 +1,8 @@
 const dutiesBase = document.querySelector('meta[name="crewconnect-api"]')?.content;
 const dutySessionKey = 'crewconnect-duty-session:' + (dutiesBase || location.origin);
 let hostedDuties = Boolean(dutiesBase || document.querySelector('meta[name="crewconnect-shared"]'));
+const dutyServerConfigured = hostedDuties;
+let demoVoiceEnabled = false;
 let dutySession;
 try {
   dutySession = JSON.parse(sessionStorage.getItem(dutySessionKey));
@@ -29,7 +31,7 @@ function demoSchedule() {
   return {
     user: {id: state.member, name: state.member},
     members: crew.map(name => ({id: name, name})),
-    duties: state.duties, reports: state.reports, voiceEnabled: false
+    duties: state.duties, reports: state.reports, voiceEnabled: demoVoiceEnabled
   };
 }
 
@@ -62,13 +64,14 @@ async function dutyRequest(path, data, signal, session = dutySession) {
 }
 
 async function loadDuties(refreshNotice) {
-  if (!hostedDuties) return;
+  if (!dutyServerConfigured) return;
   const request = ++scheduleRequest;
   try {
     const next = await dutyRequest('/api/duties');
     if (request !== scheduleRequest) return;
+    hostedDuties = !next.demo;
     if (next.demo) {
-      hostedDuties = false;
+      demoVoiceEnabled = Boolean(next.voiceEnabled);
     } else {
       schedule = next;
       if (dutySession && dutySession.member !== next.user.id) storeDutySession(dutySession.password, next.user.id);
@@ -79,9 +82,9 @@ async function loadDuties(refreshNotice) {
     if (request !== scheduleRequest) return;
     scheduleError = error;
     if (error.status === 401) {
+      hostedDuties = true;
       schedule = null;
-      dutySession = null;
-      sessionStorage.removeItem(dutySessionKey);
+      clearDutySession();
     }
   }
   if (isDutyPage()) render();
@@ -90,6 +93,11 @@ async function loadDuties(refreshNotice) {
 function storeDutySession(password, member) {
   dutySession = {password, member};
   sessionStorage.setItem(dutySessionKey, JSON.stringify(dutySession));
+}
+
+function clearDutySession() {
+  dutySession = null;
+  sessionStorage.removeItem(dutySessionKey);
 }
 
 function signInDuty() {
@@ -111,9 +119,8 @@ function signInDuty() {
 
 function signOutDuty() {
   ++scheduleRequest;
-  dutySession = null;
+  clearDutySession();
   schedule = null;
-  sessionStorage.removeItem(dutySessionKey);
   scheduleError = Object.assign(new Error('Zaloguj się hasłem załogi, aby zobaczyć harmonogram.'), {status: 401});
   render();
 }
@@ -354,13 +361,17 @@ function editDutyReport(data, report, duty, local = false) {
   const id = duty?.id || report?.id || crypto.randomUUID();
   const reportTitle = duty?.title || report?.title || '';
   const day = duty?.starts.slice(0, 10) || report?.date || dateValue();
+  const voiceEnabled = Boolean((data || currentSchedule())?.voiceEnabled);
+  const voiceUnavailable = !dutyServerConfigured ? 'Raport głosowy wymaga połączenia z serwerem CrewConnect.' :
+    hostedDuties ? (schedule ? 'Na serwerze trzeba ustawić klucz NVIDIA, aby włączyć raporty głosowe.' :
+      'Zaloguj się do harmonogramu załogi, aby nagrać raport.') :
+    'Raport głosowy wymaga konfiguracji NVIDIA i hasła załogi na serwerze.';
   openForm(report ? 'Edytuj raport' : duty ? 'Złóż raport z przydziału' : 'Raport bez przydziału', `
     ${duty ? `<div class="duty-report-context"><strong>${escape(duty.title)}</strong><span>${dutyDayLabel(day)} · ${dutyHours(duty)}</span></div>` : `
       <label>Obowiązek <input name="title" required maxlength="100" value="${escape(reportTitle)}"></label>
       <label>Data <input name="date" type="date" required value="${escape(day)}"></label>`}
-    ${!local && hostedDuties && data?.voiceEnabled ? voiceFields() : ''}
+    ${voiceFields(voiceEnabled, voiceUnavailable, !hostedDuties)}
     <label>Treść raportu <textarea name="notes" rows="4" maxlength="1000">${escape(report?.notes || '')}</textarea></label>
-    ${!local && hostedDuties && !data?.voiceEnabled ? '<p class="muted duty-voice-unavailable">Nagrywanie będzie dostępne po konfiguracji NVIDIA.</p>' : ''}
     <label>Status obowiązku <select name="status">${dutyStatuses.map(status =>
       `<option${status === (report?.status || (duty && !duty.completed ? 'W trakcie' : 'Wykonano')) ? ' selected' : ''}>${status}</option>`
     ).join('')}</select></label>`,
@@ -385,7 +396,7 @@ function editDutyReport(data, report, duty, local = false) {
       save('Zapisano raport.');
     }
   });
-  if (!local && data?.voiceEnabled) bindVoice(dialog.querySelector('form'));
+  if (voiceEnabled) bindVoice(dialog.querySelector('form'));
 }
 
 async function handleDutyAction(button) {

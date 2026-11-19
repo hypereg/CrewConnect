@@ -107,27 +107,30 @@ async function saveReport(duties, reports, data, user) {
 export function createDutyApi(db, {CREW_MEMBERS, CREW_PASSWORD, NVIDIA_API_KEY} = {}) {
   const members = readMembers(CREW_MEMBERS);
   const passwordHash = CREW_PASSWORD ? hash(CREW_PASSWORD) : null;
-  const duties = db.collection('crewDuties');
-  const reports = db.collection('crewDutyReports');
+  const duties = db?.collection('crewDuties');
+  const reports = db?.collection('crewDutyReports');
+  const voiceEnabled = Boolean(passwordHash && NVIDIA_API_KEY);
   return async (path, request) => {
+    const isSchedule = path === '/api/duties' && request.method === 'GET';
+    if (isSchedule && (!db || !passwordHash)) return json({demo: true, voiceEnabled});
     if (!passwordHash) {
-      return path === '/api/duties' && request.method === 'GET' ? json({demo: true}) :
-        fail('Ustaw hasło załogi, aby korzystać ze wspólnego harmonogramu.', 503);
+      return fail('Na serwerze trzeba ustawić wspólne hasło załogi.', 503);
     }
     const encoded = request.headers.get('Authorization')?.match(/^Basic ([\w+/=]{1,1024})$/)?.[1];
     const credentials = encoded ? Buffer.from(encoded, 'base64').toString('utf8') : '';
     const separator = credentials.indexOf(':');
     if (separator === -1 || !timingSafeEqual(hash(credentials.slice(separator + 1)), passwordHash)) {
-      return fail(encoded ? 'Hasło załogi jest nieprawidłowe.' : 'Zaloguj się hasłem załogi, aby zobaczyć harmonogram.', 401);
+      return fail(encoded ? 'Hasło załogi jest nieprawidłowe.' : 'Zaloguj się hasłem załogi.', 401);
     }
+    if (path === '/api/reports/draft' && request.method === 'POST') return draftReport(request, NVIDIA_API_KEY);
+    if (!db) return fail('Wspólne zapisy wymagają bazy MongoDB.', 503);
     const memberId = credentials.slice(0, separator);
     const user = members.find(person => person.id === memberId);
-    if (request.method === 'GET' && path === '/api/duties') {
-      return snapshot(duties, reports, members, user || members[0], Boolean(NVIDIA_API_KEY));
+    if (isSchedule) {
+      return snapshot(duties, reports, members, user || members[0], voiceEnabled);
     }
     if (!user) return fail('Wybierz profil załogi.', 403);
     if (request.method !== 'POST') return fail('Nieznana operacja.', 404);
-    if (path === '/api/reports/draft') return draftReport(request, NVIDIA_API_KEY);
     if (request.headers.get('Content-Type') !== 'application/json') return fail('Nieprawidłowy formularz.', 415);
     const bytes = await readBytes(request, 8192);
     let data;

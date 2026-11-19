@@ -6,17 +6,19 @@ import { MongoClient } from 'mongodb';
 import { createDutyApi } from './crew-duties.mjs';
 
 const { MONGODB_URI, MONGODB_DATABASE = 'crewconnect', FRONTEND_ORIGIN, PORT = '3000' } = process.env;
-if (!MONGODB_URI) throw new Error('Set MONGODB_URI before starting.');
-const client = new MongoClient(MONGODB_URI, {maxPoolSize: 5, serverSelectionTimeoutMS: 5000});
-const db = client.db(MONGODB_DATABASE);
-try {
-  await db.command({ping: 1});
-} catch (error) {
-  await client.close();
-  console.error('MongoDB connection failed:', error.code ?? error.name);
-  process.exit(1);
+let db;
+if (MONGODB_URI) {
+  const client = new MongoClient(MONGODB_URI, {maxPoolSize: 5, serverSelectionTimeoutMS: 5000});
+  db = client.db(MONGODB_DATABASE);
+  try {
+    await db.command({ping: 1});
+  } catch (error) {
+    await client.close();
+    console.error('MongoDB connection failed:', error.code ?? error.name);
+    process.exit(1);
+  }
 }
-const workspaces = db.collection('workspaces');
+const workspaces = db?.collection('workspaces');
 const dutyApi = createDutyApi(db, process.env);
 
 const assets = new Map([
@@ -64,6 +66,7 @@ createServer(async (req, res) => {
       res.setHeader('Vary', 'Origin');
       if (req.method === 'OPTIONS') return res.writeHead(crossOrigin ? 204 : 403).end();
       if (!['GET', 'PUT'].includes(req.method)) return res.writeHead(405).end();
+      if (!workspaces) return res.writeHead(503).end();
       res.setHeader('Cache-Control', 'no-store');
       let id = crossOrigin ? req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1] :
         req.headers.cookie?.match(/(?:^|; *)crew_workspace=([a-f0-9]{64})(?:;|$)/)?.[1];

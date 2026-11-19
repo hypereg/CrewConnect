@@ -1,9 +1,9 @@
 # CrewConnect z MongoDB Atlas
 
-Backend wymaga Node.js 22 oraz dostępu do klastra Atlas. W Atlas dodaj adres IP serwera aplikacji do listy dostępu i nadaj użytkownikowi bazy prawo odczytu oraz zapisu w bazie `crewconnect`.
+Backend wymaga Node.js 22. Wspólny harmonogram wymaga MongoDB. Jeśli korzystasz z Atlas, dodaj adres IP serwera aplikacji do listy dostępu i nadaj użytkownikowi bazy prawo odczytu oraz zapisu w bazie `crewconnect`.
 
 1. Uruchom `npm ci`.
-2. Skopiuj `.env.example` do `.env` i ustaw `MONGODB_URI` na adres połączenia Atlas. W hostingu ustaw go jako sekret środowiskowy. Plik `.env` jest ignorowany przez Git.
+2. Skopiuj `.env.example` do `.env`. Aby włączyć synchronizację danych, ustaw `MONGODB_URI` na adres połączenia MongoDB. W hostingu ustaw go jako sekret środowiskowy. Plik `.env` jest ignorowany przez Git.
 3. Uruchom `node --env-file=.env server.mjs` i otwórz `http://localhost:3000`.
 4. Na serwerze HTTPS ustaw `NODE_ENV=production`. Przy wdrożeniu w kontenerze ustaw dodatkowo `HOST=0.0.0.0`.
 
@@ -25,4 +25,6 @@ GitHub Pages hostuje pliki PWA. Backend łączy się z Atlas, a frontend używa 
 
 Kolekcje `crewDuties` i `crewDutyReports` MongoDB przechowują wspólny harmonogram i dziennik. Załoga widzi wszystkie wpisy i może planować przydziały. Zapis wykonania i raportu z przydziału jest dostępny po wybraniu przypisanego profilu. Raporty ze wcześniejszego obszaru roboczego są dostępne w sekcji „Raporty w tej przeglądarce”. Instalacje bez `CREW_PASSWORD` korzystają z trybu demo.
 
-Raport głosowy wymaga HTTPS lub `localhost` i dostępu do mikrofonu. Po wybraniu „Przygotuj szkic” aplikacja wysyła do [NVIDIA Parakeet RNNT Multilingual](https://build.nvidia.com/nvidia/parakeet-1_1b-rnnt-multilingual-asr/api) maksymalnie 30 sekund dźwięku. Po transkrypcji [Qwen3-Next przez NVIDIA NIM](https://docs.api.nvidia.com/nim/reference/qwen-qwen3-next-80b-a3b-instruct-infer) redaguje polski raport. Użytkownik może odsłuchać nagranie i poprawić szkic przed zapisem. CrewConnect zapisuje w MongoDB wyłącznie zatwierdzony tekst. Backend potrzebuje dostępu do `grpc.nvcf.nvidia.com:443` i `integrate.api.nvidia.com:443`.
+Raport głosowy działa również w prototypie bez bazy. Wystarczy uruchomić backend z `CREW_PASSWORD` i `NVIDIA_API_KEY`, otworzyć raport i wpisać wspólne hasło załogi przy pierwszym użyciu mikrofonu w danej karcie. W trybie wspólnego harmonogramu wystarczy wcześniejsze zalogowanie.
+
+Raport głosowy wymaga HTTPS lub `localhost` i dostępu do mikrofonu. Wybierz „Nagraj raport”, powiedz, co się wydarzyło, i kliknij „Zakończ i wyślij do AI”. [NVIDIA Parakeet RNNT Multilingual](https://build.nvidia.com/nvidia/parakeet-1_1b-rnnt-multilingual-asr/api) przepisuje do 30 sekund dźwięku, a [Qwen3-Next przez NVIDIA NIM](https://docs.api.nvidia.com/nim/reference/qwen-qwen3-next-80b-a3b-instruct-infer) redaguje polski szkic. Gotowa treść trafia do edytowalnego pola raportu. Jeżeli użytkownik już coś wpisał, może sam zdecydować, czy zastąpić to szkicem. CrewConnect zapisuje wyłącznie zatwierdzony tekst. Backend potrzebuje dostępu do `grpc.nvcf.nvidia.com:443` i `integrate.api.nvidia.com:443`.

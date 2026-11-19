@@ -1,19 +1,21 @@
 const maxReportSeconds = 30;
 
-function voiceFields() {
+function voiceFields(enabled, unavailable, demo) {
   return `<fieldset class="voice-box">
     <legend>Raport głosowy</legend>
-    <p class="muted">Nagraj do 30 sekund. Po wybraniu „Przygotuj szkic” nagranie trafi do NVIDIA.</p>
+    <p class="muted">${enabled ? 'Mów do 30 sekund. Po wysłaniu nagrania NVIDIA przygotuje krótki raport po polsku.' : unavailable}</p>
+    ${enabled && demo ? `<label data-voice-access${dutySession ? ' hidden' : ''}>Hasło załogi
+      <input type="password" name="voicePassword" maxlength="150" autocomplete="current-password"></label>` : ''}
     <div class="duty-actions">
-      <button type="button" class="secondary" data-record>Nagraj raport</button>
-      <button type="button" class="secondary" data-stop hidden>Zatrzymaj</button>
-      <button type="button" class="secondary" data-draft hidden>Przygotuj szkic</button>
+      <button type="button" class="primary" data-record${enabled ? '' : ' disabled'}>Nagraj raport</button>
+      <button type="button" class="primary" data-stop hidden>Zakończ i wyślij do AI</button>
+      <button type="button" class="primary" data-draft hidden>Wyślij nagranie do AI</button>
     </div>
     <audio data-playback controls hidden aria-label="Odsłuch nagrania"></audio>
     <p data-voice-status role="status" hidden></p>
     <div data-suggestion hidden>
       <p class="report-notes" data-suggestion-text></p>
-      <button type="button" class="secondary" data-use-draft>Wstaw do raportu</button>
+      <button type="button" class="secondary" data-use-draft>Zastąp treść szkicem</button>
     </div>
   </fieldset>`;
 }
@@ -64,11 +66,16 @@ function bindVoice(form) {
   const suggestion = form.querySelector('[data-suggestion]');
   const suggestionText = form.querySelector('[data-suggestion-text]');
   const useDraft = form.querySelector('[data-use-draft]');
+  const access = form.querySelector('[data-voice-access]');
+  const password = form.elements.voicePassword;
+  const notes = form.elements.notes;
+  const submit = form.querySelector('[type=submit]');
   let stream;
   let recorder;
   let timer;
   let recording;
   let audioUrl;
+  let sendOnStop = false;
   const lifetime = new AbortController();
   const active = () => !lifetime.signal.aborted && dialog.open && form.isConnected;
   const message = value => {
@@ -80,6 +87,14 @@ function bindVoice(form) {
     stream?.getTracks().forEach(track => track.stop());
     stream = null;
   };
+  function voiceSession() {
+    if (dutySession) return dutySession;
+    if (password?.value) return {member: '', password: password.value};
+    message(access ? 'Wpisz wspólne hasło załogi, aby użyć raportu głosowego.' :
+      'Zaloguj się ponownie do harmonogramu, aby użyć raportu głosowego.');
+    password?.focus();
+    return null;
+  }
   dialog.addEventListener('close', () => {
     lifetime.abort();
     if (recorder?.state === 'recording') recorder.stop();
@@ -96,8 +111,10 @@ function bindVoice(form) {
   }
 
   record.onclick = async () => {
+    if (submit.disabled || !voiceSession()) return;
     record.disabled = true;
     draft.disabled = true;
+    submit.disabled = true;
     message('Oczekiwanie na dostęp do mikrofonu…');
     try {
       stream = await navigator.mediaDevices.getUserMedia({audio: true});
@@ -108,6 +125,7 @@ function bindVoice(form) {
       recorder = new MediaRecorder(stream);
       const parts = [];
       let failed = false;
+      sendOnStop = false;
       recorder.ondataavailable = event => { if (event.data.size) parts.push(event.data); };
       recorder.onerror = () => { failed = true; };
       recorder.onstop = () => {
@@ -116,6 +134,7 @@ function bindVoice(form) {
         stop.hidden = true;
         record.disabled = false;
         draft.disabled = false;
+        submit.disabled = false;
         if (failed || !parts.length) {
           message('Nie udało się nagrać dźwięku. Spróbuj ponownie.');
           return;
@@ -124,9 +143,11 @@ function bindVoice(form) {
         audioUrl = URL.createObjectURL(recording);
         playback.src = audioUrl;
         playback.hidden = false;
+        draft.textContent = 'Wyślij nagranie do AI';
         draft.hidden = false;
         record.textContent = 'Nagraj ponownie';
-        message('Nagranie gotowe do odsłuchania.');
+        if (sendOnStop) void sendRecording();
+        else message('Minęło 30 sekund. Możesz odsłuchać lub wysłać nagranie.');
       };
       recorder.start();
       if (audioUrl) URL.revokeObjectURL(audioUrl);
@@ -139,46 +160,76 @@ function bindVoice(form) {
       suggestion.hidden = true;
       stop.hidden = false;
       message('Nagrywanie…');
-      timer = setTimeout(() => stop.click(), maxReportSeconds * 1000);
+      stop.focus();
+      timer = setTimeout(() => {
+        if (recorder.state === 'recording') recorder.stop();
+      }, maxReportSeconds * 1000);
     } catch {
       releaseMicrophone();
       if (active()) {
         record.disabled = false;
         draft.disabled = false;
+        submit.disabled = false;
         message('Nie udało się uruchomić mikrofonu. Sprawdź uprawnienia w przeglądarce.');
       }
     }
   };
   stop.onclick = () => {
-    if (recorder?.state === 'recording') recorder.stop();
+    if (recorder?.state !== 'recording') return;
+    sendOnStop = true;
+    recorder.stop();
   };
-  draft.onclick = async () => {
-    if (!recording) return;
+  async function sendRecording() {
+    if (!recording || submit.disabled) return;
+    const session = voiceSession();
+    if (!session) return;
     draft.disabled = true;
     record.disabled = true;
+    submit.disabled = true;
     suggestion.hidden = true;
     message('NVIDIA przygotowuje szkic…');
     try {
       const wav = await reportWav(recording);
       if (!active()) return;
-      const result = await dutyRequest('/api/reports/draft', wav, lifetime.signal);
+      const result = await dutyRequest('/api/reports/draft', wav, lifetime.signal, session);
       if (!active()) return;
-      suggestionText.textContent = result.notes;
-      suggestion.hidden = false;
-      message('Sprawdź szkic przed wstawieniem go do raportu.');
+      if (access && !dutySession) {
+        storeDutySession(session.password, session.member);
+        password.value = '';
+        access.hidden = true;
+      }
+      draft.hidden = true;
+      if (notes.value.trim()) {
+        suggestionText.textContent = result.notes;
+        suggestion.hidden = false;
+        message('Szkic AI jest gotowy. Możesz zastąpić nim wpisaną treść.');
+        useDraft.focus();
+      } else {
+        fillReport(result.notes);
+      }
     } catch (error) {
-      if (active()) message(error instanceof DOMException ? 'Nie udało się odczytać nagrania.' : error.message);
+      if (!active()) return;
+      draft.textContent = 'Ponów wysyłanie do AI';
+      if (error.status === 401 && access) {
+        clearDutySession();
+        access.hidden = false;
+        password.focus();
+      }
+      message(error instanceof DOMException ? 'Nie udało się odczytać nagrania.' : error.message);
     } finally {
       if (active()) {
         draft.disabled = false;
         record.disabled = false;
+        submit.disabled = false;
       }
     }
-  };
-  useDraft.onclick = () => {
-    form.elements.notes.value = suggestionText.textContent;
-    form.elements.notes.focus();
+  }
+  function fillReport(text) {
+    notes.value = text;
+    notes.focus();
     suggestion.hidden = true;
-    message('Szkic wstawiony. Możesz go poprawić przed zapisem.');
-  };
+    message('Szkic AI jest w treści raportu. Sprawdź go przed zapisem.');
+  }
+  draft.onclick = sendRecording;
+  useDraft.onclick = () => fillReport(suggestionText.textContent);
 }

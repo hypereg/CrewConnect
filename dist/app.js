@@ -274,13 +274,13 @@ function showNotice(message) {
 
 function openForm(name, fields, submitLabel, onSubmit) {
   dialog.innerHTML = `<div class="dialog-head"><h2 id="dialog-title">${name}</h2><button type="button" data-close class="secondary" aria-label="Zamknij">✕</button></div>
-    <form>${fields}<p class="form-error" data-submit-error role="alert" hidden></p><button class="primary">${submitLabel}</button></form>`;
+    <form>${fields}<p class="form-error" data-submit-error role="alert" hidden></p><button type="submit" class="primary">${submitLabel}</button></form>`;
   dialog.setAttribute('aria-labelledby', 'dialog-title');
   dialog.querySelector('[data-close]').onclick = () => dialog.close();
   dialog.querySelector('form').onsubmit = async event => {
     event.preventDefault();
     const form = event.currentTarget;
-    const submit = form.querySelector('button:not([type])');
+    const submit = form.querySelector('[type=submit]');
     const error = form.querySelector('[data-submit-error]');
     if (submit.disabled) return;
     submit.disabled = true;
