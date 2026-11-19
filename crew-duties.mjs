@@ -6,12 +6,10 @@ const statuses = ['Wykonano', 'W trakcie', 'Wymaga uwagi'];
 const validId = value => typeof value === 'string' && /^[\w-]{1,80}$/.test(value);
 const clean = value => typeof value === 'string' ? value.trim() : '';
 const hash = value => createHash('sha256').update(value).digest();
-const defaultMembers = [
-  {id: 'marek', name: 'Marek Nowak'},
-  {id: 'anna', name: 'Anna Kowalska'},
-  {id: 'piotr', name: 'Piotr Zieliński'}
-];
-
+const dutyMember = workspace => ({
+  id: 'duty-' + hash('crewconnect-duty:' + workspace._id).toString('hex'),
+  name: workspace.snapshot.userProfile.name
+});
 function validDay(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const day = new Date(value + 'T00:00:00Z');
@@ -21,21 +19,6 @@ function validDay(value) {
 function validTime(value) {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)
     && validDay(value.slice(0, 10));
-}
-
-function readMembers(config) {
-  if (!config) return defaultMembers;
-  const invalid = () => new Error('Set CREW_MEMBERS to a JSON list of crew members with unique IDs and display names.');
-  let members;
-  try {
-    members = JSON.parse(config);
-  } catch {
-    throw invalid();
-  }
-  if (!Array.isArray(members) || !members.length || members.some(member =>
-    !validId(member?.id) || !clean(member.name) || member.name.length > 100
-  ) || new Set(members.map(member => member.id)).size !== members.length) throw invalid();
-  return members;
 }
 
 async function snapshot(duties, reports, members, user, voiceEnabled) {
@@ -104,8 +87,7 @@ async function saveReport(duties, reports, data, user) {
   }
 }
 
-export function createDutyApi(db, {CREW_MEMBERS, CREW_PASSWORD, NVIDIA_API_KEY} = {}) {
-  const members = readMembers(CREW_MEMBERS);
+export function createDutyApi(db, {CREW_PASSWORD, NVIDIA_API_KEY, FRONTEND_ORIGIN} = {}) {
   const passwordHash = CREW_PASSWORD ? hash(CREW_PASSWORD) : null;
   const duties = db?.collection('crewDuties');
   const reports = db?.collection('crewDutyReports');
@@ -124,12 +106,21 @@ export function createDutyApi(db, {CREW_MEMBERS, CREW_PASSWORD, NVIDIA_API_KEY} 
     }
     if (path === '/api/reports/draft' && request.method === 'POST') return draftReport(request, NVIDIA_API_KEY);
     if (!db) return fail('Wspólne zapisy wymagają bazy MongoDB.', 503);
-    const memberId = credentials.slice(0, separator);
-    const user = members.find(person => person.id === memberId);
-    if (isSchedule) {
-      return snapshot(duties, reports, members, user || members[0], voiceEnabled);
+    const browserOrigin = request.headers.get('Origin');
+    const token = FRONTEND_ORIGIN && browserOrigin === FRONTEND_ORIGIN ? request.headers.get('X-Workspace-Token') :
+      request.headers.get('Cookie')?.match(/(?:^|; *)crew_workspace=([a-f0-9]{64})(?:;|$)/)?.[1];
+    if (!token || !/^[a-f0-9]{64}$/.test(token)) return fail('Otwórz swój profil i spróbuj ponownie.', 403);
+    const directory = db.collection('workspaces');
+    const profileFields = {projection: {'snapshot.userProfile.id': 1, 'snapshot.userProfile.name': 1}};
+    const workspace = await directory.findOne({_id: token}, profileFields);
+    if (!workspace?.snapshot?.userProfile) return fail('Zapisz swój profil przed użyciem harmonogramu.', 403);
+    const user = dutyMember(workspace);
+    let members = [];
+    if (isSchedule || path === '/api/duties') {
+      const profiles = await directory.find({'snapshot.userProfile.id': {$exists: true}}, profileFields).toArray();
+      members = profiles.map(dutyMember);
     }
-    if (!user) return fail('Wybierz profil załogi.', 403);
+    if (isSchedule) return snapshot(duties, reports, members, user, voiceEnabled);
     if (request.method !== 'POST') return fail('Nieznana operacja.', 404);
     if (request.headers.get('Content-Type') !== 'application/json') return fail('Nieprawidłowy formularz.', 415);
     const bytes = await readBytes(request, 8192);

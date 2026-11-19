@@ -101,8 +101,8 @@ function invitation(state, token, checkCapacity = true) {
 }
 
 function publicProfile(person) {
-  const {id, name, bio = '', interests = []} = person;
-  return {id, name, bio, interests};
+  const {id, name, age = null, roleOnShip = '', bio = '', interests = []} = person;
+  return {id, name, age, roleOnShip, bio, interests};
 }
 
 function cabinLabels(value) {
@@ -337,6 +337,12 @@ function memberAction(state, body, user, voyage) {
       user.name = text(body.name, 60, 'Nazwa wyświetlana');
       user.bio = text(body.bio, 240, 'O mnie', false);
       user.interests = text(body.interests, 160, 'Zainteresowania', false).split(',').map(item => item.trim()).filter(Boolean);
+      if (body.age !== undefined) {
+        const age = body.age === '' || body.age === null ? null : Number(body.age);
+        if (age !== null && (!Number.isInteger(age) || age < 18 || age > 120)) fail(400, 'Wpisz wiek od 18 do 120 lat albo zostaw pole puste.');
+        user.age = age;
+      }
+      if (body.roleOnShip !== undefined) user.roleOnShip = text(body.roleOnShip, 60, 'Rola na pokładzie', false);
       user.visible = user.role === 'guest' && body.visible === true;
       return {};
     }

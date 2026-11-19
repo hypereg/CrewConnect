@@ -371,7 +371,8 @@ function renderPeople() {
         '<a class="button primary" href="#konto">Ustaw widoczność profilu</a>', 'empty') :
         '<div class="people-grid"><div>' + (candidate ?
           card('<div class="portrait">' + escape(initials(candidate.name)) + '</div><div class="person-content"><h2>' +
-            escape(candidate.name) + '</h2>' + (candidate.bio ? '<p>' + escape(candidate.bio) + '</p>' : '') +
+            escape(candidate.name) + (candidate.age ? ', ' + escape(candidate.age) : '') + '</h2>' +
+            (candidate.roleOnShip ? '<p>' + escape(candidate.roleOnShip) + '</p>' : '') + (candidate.bio ? '<p>' + escape(candidate.bio) + '</p>' : '') +
             '<div class="interests">' + candidate.interests.map(item => '<span class="pill muted">' + escape(item) + '</span>').join('') +
             '</div><div class="people-actions">' + button('Pomiń', 'skip', candidate.id, '', 'secondary') +
             button('Chcę poznać', 'connect', candidate.id, '', 'primary') + '</div></div>', 'person-card') :
@@ -397,7 +398,9 @@ function account() {
         escape(user.name) + '</h2>' + (user.cabin ? '<p>Kabina ' + escape(user.cabin) + '</p>' : '') + '</div></div>' +
         (user.role === 'admin' || !board.voyage ? '' : form('profile',
           field('Nazwa wyświetlana', 'name', user.name, 'required maxlength="60"') +
-          (guest ? textarea('O mnie', 'bio', user.bio, 'maxlength="240"') +
+          (guest ? field('Wiek (opcjonalnie)', 'age', user.age ?? '', 'type="number" min="18" max="120" step="1" inputmode="numeric"') +
+            field('Rola na pokładzie', 'roleOnShip', user.roleOnShip, 'maxlength="60"') +
+            textarea('O mnie', 'bio', user.bio, 'maxlength="240"') +
             field('Zainteresowania (oddziel przecinkami)', 'interests', user.interests.join(', '), 'maxlength="160"') +
             '<label class="check"><input name="visible" type="checkbox" ' + (user.visible ? 'checked' : '') +
             '> Pokaż mój profil w „Poznaj załogę”</label>' : ''), submit('Zapisz profil'))))) +

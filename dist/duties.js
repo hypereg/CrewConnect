@@ -23,14 +23,10 @@ const dutyPages = {
 const isDutyPage = (page = location.hash.slice(1)) => Object.hasOwn(dutyPages, page);
 
 function demoSchedule() {
-  state.duties ??= [
-    {id: 'demo-watch', kind: 'Warta', title: 'Warta na mostku', assignee: crew[0], starts: dateValue() + 'T08:00', ends: dateValue() + 'T12:00'},
-    {id: 'demo-mess', kind: 'Obowiązek', title: 'Przegląd wyposażenia kuchni', assignee: crew[1], starts: dateValue() + 'T13:00', ends: dateValue() + 'T14:00'},
-    {id: 'demo-night', kind: 'Warta', title: 'Warta nocna', assignee: crew[2], starts: dateValue() + 'T22:00', ends: dateValue(1) + 'T02:00'}
-  ];
+  state.duties ??= [];
   return {
     user: {id: state.member, name: displayName(state.member)},
-    members: currentRoster().map(profile => ({id: profileId(profile), name: profile.name})),
+    members: state.userProfile ? [{id: state.userProfile.id, name: state.userProfile.name}] : [],
     duties: state.duties, reports: state.reports, voiceEnabled: demoVoiceEnabled
   };
 }
@@ -46,6 +42,8 @@ async function dutyRequest(path, data, signal, session = dutySession) {
     const credentials = new TextEncoder().encode(session.member + ':' + session.password);
     headers.Authorization = 'Basic ' + btoa(String.fromCharCode(...credentials));
   }
+  const token = dutiesBase && localStorage.getItem(tokenKey);
+  if (token) headers['X-Workspace-Token'] = token;
   const options = {cache: 'no-store', signal, headers};
   if (data !== undefined) {
     headers['Content-Type'] = wav ? 'audio/wav' : 'application/json';
@@ -113,13 +111,12 @@ function signInDuty() {
     <label>Wspólne hasło załogi <input type="password" name="password" required maxlength="150" autocomplete="current-password"></label>`,
   'Zaloguj się', async fields => {
     const password = fields.get('password');
+    await syncWorkspace();
     const next = await dutyRequest('/api/duties', undefined, undefined, {member: '', password});
     if (!next.user) throw new Error('Wspólny harmonogram jest niedostępny.');
     ++scheduleRequest;
-    const preferred = next.members.find(person => person.name === state.member);
-    const selected = preferred || next.user;
-    storeDutySession(password, selected.id);
-    schedule = {...next, user: selected};
+    storeDutySession(password, next.user.id);
+    schedule = next;
     scheduleError = null;
     render();
   });
@@ -131,22 +128,6 @@ function signOutDuty() {
   schedule = null;
   scheduleError = Object.assign(new Error('Zaloguj się hasłem załogi, aby zobaczyć harmonogram.'), {status: 401});
   render();
-}
-
-function changeDutyProfile(id) {
-  if (!hostedDuties && isWorkspaceMember(id)) {
-    state.member = id;
-    save();
-    content.querySelector('#duty-profile')?.focus();
-    return;
-  }
-  const person = schedule?.members.find(item => item.id === id);
-  if (!person || !dutySession) return;
-  ++scheduleRequest;
-  storeDutySession(dutySession.password, id);
-  schedule.user = person;
-  render();
-  content.querySelector('#duty-profile')?.focus();
 }
 
 const dutyPerson = (data, id) => escape(data.members.find(person => person.id === id)?.name || id);
@@ -307,9 +288,7 @@ function renderDuties(page) {
   return `<div class="duties-page">
     <header class="duties-heading">${heading}
       <div class="duty-account">
-        <label class="duty-profile">Profil załogi
-          <select id="duty-profile">${data.members.map(person => `<option value="${escape(person.id)}"${person.id === data.user.id ? ' selected' : ''}>${escape(person.name)}</option>`).join('')}</select>
-        </label>
+        <span class="duty-profile">Mój profil <strong>${escape(data.user.name)}</strong></span>
         ${hostedDuties ? '<button class="duty-quiet" data-action="duty-refresh">Odśwież</button><button class="duty-quiet" data-action="duty-logout">Wyloguj</button>' : ''}
       </div>
     </header>

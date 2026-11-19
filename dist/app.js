@@ -1,32 +1,8 @@
-const crewProfiles = [
-  {name: 'Marek Nowak', gender: 'men', role: 'Marynarz pokładowy', initials: 'MN', color: 'teal',
-    bio: 'Chętnie zagram mecz FIFA albo zorganizuję wieczór z planszówkami.', interests: ['FIFA', 'Planszówki']},
-  {name: 'Anna Kowalska', gender: 'women', role: 'Oficer wachtowy', initials: 'AK', color: 'plum',
-    bio: 'Szukam towarzystwa do wspólnych treningów i rozmów przy kawie.', interests: ['Trening', 'Kawa']},
-  {name: 'Piotr Zieliński', gender: 'men', role: 'Mechanik', initials: 'PZ', color: 'blue',
-    bio: 'Po wachcie najchętniej oglądam filmy albo gram w szachy.', interests: ['Filmy', 'Szachy']},
-  {name: 'Julia Wójcik', gender: 'women', role: 'Oficer nawigacyjny', initials: 'JW', color: 'blue',
-    bio: 'Lubię fotografować wschody słońca i dzielić się zdjęciami z rejsu.', interests: ['Fotografia', 'Podróże']},
-  {name: 'Tomasz Lewandowski', gender: 'men', role: 'Bosman', initials: 'TL', color: 'teal',
-    bio: 'Po pracy chętnie rozgrywam kilka partii w ping-ponga.', interests: ['Tenis stołowy', 'Quizy']},
-  {name: 'Natalia Mazur', gender: 'women', role: 'Elektryk okrętowy', initials: 'NM', color: 'plum',
-    bio: 'Mam słabość do kryminałów i chętnie wymienię się książkami.', interests: ['Książki', 'Podcasty']},
-  {name: 'Oskar Kamiński', gender: 'men', role: 'Kucharz okrętowy', initials: 'OK', color: 'teal',
-    bio: 'Chętnie wymienię się przepisami albo pogram na gitarze po kolacji.', interests: ['Gotowanie', 'Gitara']},
-  {name: 'Karolina Lis', gender: 'women', role: 'Marynarz pokładowy', initials: 'KL', color: 'blue',
-    bio: 'Szukam ekipy do porannej rozgrzewki i wspólnego oglądania meczów.', interests: ['Fitness', 'Piłka nożna']},
-  {name: 'Michał Dąbrowski', gender: 'men', role: 'Mechanik wachtowy', initials: 'MD', color: 'plum',
-    bio: 'Najchętniej spędzam wolny wieczór przy grze kooperacyjnej.', interests: ['Gry kooperacyjne', 'Łamigłówki']},
-  {name: 'Zofia Król', gender: 'women', role: 'Kadetka pokładowa', initials: 'ZK', color: 'teal',
-    bio: 'Uczę się hiszpańskiego i chętnie poćwiczę konwersację przy herbacie.', interests: ['Hiszpański', 'Herbata']},
-];
-const crew = crewProfiles.map(profile => profile.name);
 const genderFilters = {all: 'Wszystkich', women: 'Kobiety', men: 'Mężczyzn'};
 const datingIntents = {dates: 'Randki', relationship: 'Związek', friendship: 'Znajomości', activities: 'Wspólne aktywności'};
 const interestKey = interest => interest.trim().toLocaleLowerCase('pl');
 const discoveryFilters = () => state.discoveryFilters?.[state.member] ?? {};
-const demoIntents = Object.keys(datingIntents);
-const profileIntent = profile => profile.intent || (profile.id ? '' : demoIntents[crewProfiles.indexOf(profile) % demoIntents.length]);
+const profileIntent = profile => profile.intent || '';
 function matchesDiscoveryFilters(profile) {
   const {intent, interest} = discoveryFilters();
   return matchesPreference(profile) && (!intent || profileIntent(profile) === intent) &&
@@ -74,11 +50,20 @@ const pendingKey = 'crewconnect-workspace-pending';
 const apiBase = document.querySelector('meta[name="crewconnect-api"]')?.content;
 const workspaceUrl = apiBase ? new URL('/api/workspace', apiBase).href : 'api/workspace';
 const tokenKey = 'crewconnect-workspace-token:' + workspaceUrl;
-let syncing = false;
+let syncing;
 
 async function syncWorkspace() {
-  if (syncing || !navigator.onLine) return;
-  syncing = true;
+  if (syncing) return syncing;
+  if (!navigator.onLine) return;
+  syncing = performWorkspaceSync();
+  try {
+    await syncing;
+  } finally {
+    syncing = undefined;
+  }
+}
+
+async function performWorkspaceSync() {
   try {
     let token = localStorage.getItem(tokenKey);
     const headers = () => token ? {Authorization: 'Bearer ' + token} : {};
@@ -108,8 +93,6 @@ async function syncWorkspace() {
     }
   } catch {
     // A later save, reload or reconnect retries the locally stored changes.
-  } finally {
-    syncing = false;
   }
 }
 const dateValue = (offset = 0) => {
@@ -120,24 +103,11 @@ const dateValue = (offset = 0) => {
 function calendarDate(date) {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
 }
-const initial = {
-  member: crew[0],
-  events: [{
-    id: 'fifa', title: 'Turniej FIFA', type: 'Gry', owner: crew[0],
-    description: 'Spotykamy się w mesie. Każdy rozegra co najmniej jeden mecz.',
-    slots: [dateValue(1) + 'T18:00', dateValue(2) + 'T20:00', dateValue(3) + 'T19:00'],
-    votes: {[crew[0]]: [0, 1], [crew[1]]: [1, 2]}
-  }],
-  reports: [{
-    id: 'example', title: 'Kontrola wyposażenia mesy', owner: crew[1],
-    status: 'Wykonano', date: dateValue(), notes: 'Wyposażenie sprawdzone i odłożone na miejsce.'
-  }]
-};
+const initial = {member: '', events: [], reports: []};
 let state = JSON.parse(localStorage.getItem(storageKey) || 'null') || initial;
 const content = document.querySelector('#content');
 const dialog = document.querySelector('#dialog');
 const member = document.querySelector('#crew');
-const personalOption = document.createElement('option');
 const notice = document.querySelector('#notice');
 let noticeTimer;
 const escape = value => String(value).replace(/[&<>"']/g, char => ({
@@ -148,16 +118,9 @@ const initials = name => name.split(/\s+/u).slice(0, 2).map(part => [...part][0]
 const personalName = id => state.userProfile?.id === id ? state.userProfile?.name : undefined;
 const displayName = (id, names) => personalName(id) ?? (names && Object.hasOwn(names, id) ? names[id] : id);
 
-function renderMemberSelector() {
-  const profile = state.userProfile;
-  if (profile) {
-    personalOption.value = profile.id;
-    personalOption.textContent = profile.name;
-    if (!personalOption.isConnected) member.prepend(personalOption);
-  } else {
-    personalOption.remove();
-  }
-  member.value = state.member;
+function activatePersonalProfile() {
+  state.member = state.userProfile?.id ?? '';
+  member.textContent = state.userProfile?.name ?? 'Dodaj mój profil';
 }
 
 const formatDate = value => new Intl.DateTimeFormat('pl-PL', {
@@ -167,6 +130,7 @@ const formatDate = value => new Intl.DateTimeFormat('pl-PL', {
 const participants = event => Object.keys(event.votes);
 const isFull = event => Number.isInteger(event.capacity) && participants(event).length >= event.capacity;
 function signupButton(event, style) {
+  if (!state.userProfile) return '<a href="#profil">Dodaj profil, aby się zapisać</a>';
   const joined = Boolean(event.votes[state.member]);
   const full = !joined && isFull(event);
   const label = joined ? 'Zmień dostępność' : full ? 'Brak miejsc' : 'Zapisz się';
@@ -219,7 +183,7 @@ function renderCalendar() {
     <div class="calendar-grid">${['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'].map(day => `<span class="weekday">${day}</span>`).join('')}${cells}</div>
   </section>
   <section class="card agenda"><header><h2>${dayLabel.format(new Date(selectedDay + 'T12:00'))}</h2>
-    <button class="primary" data-action="event" data-day="${selectedDay}">+ Nowa aktywność</button></header>
+    ${state.userProfile ? `<button class="primary" data-action="event" data-day="${selectedDay}">+ Nowa aktywność</button>` : '<a href="#profil">Dodaj profil, aby zaplanować aktywność</a>'}</header>
     ${agenda || `<p class="muted">${eventsAvailable ? 'Tego dnia nie ma wspólnych aktywności.' : 'Oczekiwanie na wspólną tablicę wydarzeń.'}</p>`}
   </section>`;
 }
@@ -252,7 +216,7 @@ function profileDetails(profile, sharedInterests = []) {
     const common = sharedInterests.includes(interestKey(interest));
     return `<span${common ? ' class="common-interest"' : ''}>${common ? '✓ ' : ''}${escape(interest)}</span>`;
   }).join('');
-  return `<h2>${escape(profile.name)}</h2>
+  return `<h2>${escape(profile.name)}${profile.age ? `, ${escape(profile.age)}` : ''}</h2>
     ${profile.role ? `<p class="muted">${escape(profile.role)}</p>` : ''}
     ${profile.bio ? `<p class="profile-bio">${escape(profile.bio)}</p>` : ''}
     ${intent ? `<p class="profile-intent">Szukam: <strong>${intent}</strong></p>` : ''}
@@ -262,7 +226,6 @@ function profileDetails(profile, sharedInterests = []) {
 
 function renderUserProfile() {
   const profile = state.userProfile;
-  const selected = profile && state.member === profile.id;
   return `<header class="crew-heading"><h1>Mój profil</h1></header>
     <article class="card profile-card">
       <div class="crew-portrait teal"><span aria-hidden="true">${profile ? escape(initials(profile.name)) : '◇'}</span></div>
@@ -270,11 +233,10 @@ function renderUserProfile() {
         ${profile ? profileDetails(profile) : '<h2>Przedstaw się załodze</h2><p class="muted">Wybierz nazwę i dodaj kilka słów o sobie.</p>'}
         <footer>
           <button class="primary" data-action="profile-edit">${profile ? 'Edytuj profil' : 'Utwórz profil'}</button>
-          ${profile && !selected ? '<button class="secondary" data-action="profile-use">Użyj tego profilu</button>' : ''}
         </footer>
       </div>
     </article>
-    <p class="muted profile-note">Profil jest przypisany do tej przeglądarki. Na wspólnej tablicy załoga widzi Twoją nazwę przy aktywnościach.</p>`;
+    <p class="muted profile-note">Tego profilu używasz przy aktywnościach, w harmonogramie i w „Poznaj załogę”. Po opublikowaniu zmiany z tego formularza pojawiają się też na Twojej karcie.</p>`;
 }
 
 let onlineDiscovery;
@@ -282,7 +244,7 @@ let discoveryLoading = false;
 let onlineError = '';
 let onlineSearch = '';
 const skippedOnline = new Set();
-const personalDiscovery = () => Boolean(state.userProfile && state.member === state.userProfile.id);
+const personalDiscovery = () => Boolean(state.userProfile);
 const onlinePeer = id => onlineDiscovery?.profiles.find(profile => profile.id === id);
 
 async function discoveryRequest(payload, peer) {
@@ -405,10 +367,9 @@ async function updateOnlineDiscovery(payload, message) {
 function renderCrew() {
   if (personalDiscovery()) return renderOnlineDiscovery();
   return `<header class="crew-heading"><h1>Poznaj załogę online</h1></header>
-    <section class="card crew-empty"><h2>${state.userProfile ? 'Wybierz swój profil' : 'Dołącz do załogi online'}</h2>
-      <p>Własny profil pozwoli Ci poznawać osoby na innych urządzeniach i pisać po dopasowaniu.</p>
-      ${state.userProfile ? '<button class="primary" data-action="go-online">Użyj mojego profilu online</button>' :
-        '<button class="primary" data-action="online-profile-edit">+ Dodaj nowy profil</button>'}
+    <section class="card crew-empty"><h2>Dołącz do załogi online</h2>
+      <p>Użyj jednego profilu na całym portalu.</p>
+      <button class="primary" data-action="online-profile-edit">+ Dodaj nowy profil</button>
     </section>`;
 }
 
@@ -527,7 +488,7 @@ function render() {
     if (link.dataset.page === (calendar || reports || discover || profile || map ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
-  renderMemberSelector();
+  activatePersonalProfile();
   updateNetwork();
   if (map) {
     if (!content.querySelector('.ship-map-frame')) {
@@ -541,15 +502,17 @@ function render() {
   } else if (calendar) {
     content.innerHTML = renderCalendar();
   } else if (reports) {
-    content.innerHTML = renderDuties(page);
+    content.innerHTML = state.userProfile ? renderDuties(page) :
+      '<section class="card"><h1>Warty i obowiązki</h1><p>Dodaj swój profil, aby korzystać z harmonogramu.</p><a href="#profil">Przejdź do profilu</a></section>';
   } else {
-    content.innerHTML = title('Życie na pokładzie', 'Aktywności załogi', 'Zaproponuj wydarzenie i znajdź termin, który pasuje wszystkim zapisanym.', 'event', 'Nowa aktywność') +
+    content.innerHTML = title('Życie na pokładzie', 'Aktywności załogi', 'Zaproponuj wydarzenie i znajdź termin, który pasuje wszystkim zapisanym.', state.userProfile ? 'event' : '', 'Nowa aktywność') +
       `<div class="stats">${stat(allEvents().length, 'Aktywności')}${stat(allEvents().filter(event => event.votes[state.member]).length, 'Moje zapisy')}${stat(allEvents().filter(event => sharedSlots(event).length).length, 'Uzgodnione terminy')}</div>
       <section class="section"><h2>Wydarzenia na pokładzie</h2><div class="grid">${allEvents().map(eventCard).join('') || '<p class="empty">Brak aktywności.</p>'}</div></section>`;
   }
 }
 
 function save(message) {
+  activatePersonalProfile();
   const snapshot = JSON.stringify(state);
   localStorage.setItem(storageKey, snapshot);
   localStorage.setItem(pendingKey, snapshot);
@@ -593,6 +556,7 @@ function editUserProfile(publishOnline = false) {
   const profile = state.userProfile;
   openForm(profile ? 'Edytuj profil' : 'Dodaj nowy profil', `
     <label>Nazwa wyświetlana <input name="displayName" required maxlength="80" autocomplete="nickname" value="${escape(profile?.name ?? '')}" autofocus></label>
+    <label>Wiek (opcjonalnie) <input name="age" type="number" min="18" max="120" step="1" inputmode="numeric" value="${profile?.age ?? ''}"></label>
     <label>Rola na pokładzie <input name="role" maxlength="60" value="${escape(profile?.role ?? '')}"></label>
     <label>Płeć (opcjonalnie) <select name="gender"><option value="">Nie podaję</option>
       <option value="women" ${profile?.gender === 'women' ? 'selected' : ''}>Kobieta</option>
@@ -608,6 +572,10 @@ function editUserProfile(publishOnline = false) {
     ${publishOnline ? '<p class="muted">Zapis opublikuje dane z formularza w „Poznaj załogę”.</p>' : ''}`,
     publishOnline ? 'Zapisz i opublikuj' : 'Zapisz profil', async (data, form) => {
     const name = data.get('displayName').trim().replace(/\s+/gu, ' ');
+    const age = data.get('age') ? Number(data.get('age')) : null;
+    if (age !== null && (!Number.isInteger(age) || age < 18 || age > 120)) {
+      throw new Error('Wpisz wiek od 18 do 120 lat albo zostaw pole puste.');
+    }
     const role = data.get('role').trim();
     const bio = data.get('bio').trim();
     const interests = [...new Set(data.get('interests').split(',').map(interest => interest.trim()).filter(Boolean))];
@@ -621,19 +589,16 @@ function editUserProfile(publishOnline = false) {
     }
     const existing = state.userProfile;
     const id = existing?.id ?? 'profile-' + crypto.randomUUID();
-    const updatedProfile = {id, name, role, bio, interests, intent: data.get('intent'),
+    const updatedProfile = {id, name, age, role, bio, interests, intent: data.get('intent'),
       gender: data.get('gender'), icebreaker: data.get('icebreaker').trim()};
     if (publishOnline) {
       await syncWorkspace();
       await discoveryRequest({action: 'publish', profile: updatedProfile});
     }
     state.userProfile = updatedProfile;
-    if (!existing || publishOnline) state.member = id;
+    activatePersonalProfile();
     save('Zapisano profil.');
-    if (publishOnline) {
-      updateNetwork();
-      void refreshDiscovery();
-    }
+    if (publishOnline) void refreshDiscovery();
   });
   dialog.addEventListener('close', () => {
     content.querySelector('[data-action="profile-edit"]')?.focus();
@@ -722,19 +687,6 @@ content.addEventListener('click', e => {
   }
   if (action === 'profile-edit') {
     editUserProfile();
-    return;
-  }
-  if (action === 'profile-use' && state.userProfile) {
-    state.member = state.userProfile.id;
-    save('Wybrano Twój profil.');
-    content.querySelector('[data-action="profile-edit"]')?.focus();
-    return;
-  }
-  if (action === 'go-online' && state.userProfile) {
-    state.member = state.userProfile.id;
-    save();
-    updateNetwork();
-    void refreshDiscovery();
     return;
   }
   if (action === 'online-clear-search') {
@@ -872,10 +824,6 @@ content.addEventListener('pointercancel', finishSwipe);
 content.addEventListener('lostpointercapture', finishSwipe);
 
 content.addEventListener('change', event => {
-  if (event.target.id === 'duty-profile') {
-    changeDutyProfile(event.target.value);
-    return;
-  }
   const {id, value} = event.target;
   if (id === 'crew-intent' || id === 'crew-interest') {
     if (!state.discoveryFilters) state.discoveryFilters = {};
@@ -901,15 +849,10 @@ content.addEventListener('toggle', event => {
   }
 }, true);
 
-member.addEventListener('change', () => {
-  state.member = member.value;
-  save();
-  void refreshDiscovery();
-});
 function refreshPage() {
   render();
   void refreshDiscovery();
-  if (isDutyPage()) void loadDuties();
+  if (isDutyPage() && state.userProfile) void loadDuties();
 }
 window.addEventListener('hashchange', () => {
   refreshPage();
@@ -927,12 +870,12 @@ window.addEventListener('storage', event => {
 const updateNetwork = () => {
   const connectedProfile = isDutyPage() ? hostedDuties : state.userProfile?.id === state.member;
   document.querySelector('#network').textContent = connectedProfile ? (navigator.onLine ? 'Online' : 'Offline') :
-    (navigator.onLine ? 'Tryb demo' : 'Demo · offline');
+    (navigator.onLine ? 'Brak aktywnego profilu' : 'Offline');
 };
 window.addEventListener('online', () => {
   updateNetwork();
   void syncWorkspace();
-  if (isDutyPage()) void loadDuties();
+  if (isDutyPage() && state.userProfile) void loadDuties();
 });
 window.addEventListener('offline', updateNetwork);
 window.addEventListener('beforeinstallprompt', event => {
@@ -945,7 +888,6 @@ window.addEventListener('beforeinstallprompt', event => {
   };
 });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(console.error);
-member.innerHTML = crew.map(name => `<option>${escape(name)}</option>`).join('');
 refreshPage();
 void syncWorkspace();
 
