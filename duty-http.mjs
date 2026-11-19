@@ -6,7 +6,7 @@ const {MONGODB_URI, MONGODB_DATABASE = 'crewconnect', FRONTEND_ORIGIN} = process
 const db = MONGODB_URI ? new MongoClient(MONGODB_URI, {maxPoolSize: 5, serverSelectionTimeoutMS: 5000})
   .db(MONGODB_DATABASE) : undefined;
 const dutyApi = createDutyApi(db, process.env);
-const routes = new Set(['/api/duties', '/api/duties/completion', '/api/reports', '/api/reports/draft']);
+const routes = new Set(['/api/duties', '/api/duties/completion', '/api/reports', '/api/reports/draft', '/api/reports/transcript']);
 
 export const isDutyRoute = path => routes.has(path);
 

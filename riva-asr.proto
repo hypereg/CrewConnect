@@ -4,6 +4,7 @@ syntax = "proto3";
 package nvidia.riva.asr;
 
 service RivaSpeechRecognition {
+  rpc Recognize(RecognizeRequest) returns (RecognizeResponse);
   rpc StreamingRecognize(stream StreamingRecognizeRequest) returns (stream StreamingRecognizeResponse);
 }
 
@@ -13,10 +14,25 @@ message RecognitionConfig {
   string language_code = 3;
   int32 max_alternatives = 4;
   bool enable_automatic_punctuation = 11;
+  string model = 13;
 }
 
 message StreamingRecognitionConfig {
   RecognitionConfig config = 1;
+  bool interim_results = 2;
+}
+
+message RecognizeRequest {
+  RecognitionConfig config = 1;
+  bytes audio = 2;
+}
+
+message RecognizeResponse {
+  repeated SpeechRecognitionResult results = 1;
+}
+
+message SpeechRecognitionResult {
+  repeated SpeechRecognitionAlternative alternatives = 1;
 }
 
 message StreamingRecognizeRequest {

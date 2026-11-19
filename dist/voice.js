@@ -1,17 +1,17 @@
-const maxReportSeconds = 30;
+const reportSampleRate = 16000;
+const reportChunkSize = reportSampleRate * 45;
 
 function voiceFields(enabled, unavailable, demo) {
   return `<fieldset class="voice-box">
     <legend>Raport głosowy</legend>
-    <p class="muted">${enabled ? 'Mów do 30 sekund. Po wysłaniu nagrania NVIDIA przygotuje krótki raport po polsku.' : unavailable}</p>
+    <p class="muted">${enabled ? 'Po zakończeniu nagranie trafi do NVIDIA, a gotowy szkic pojawi się w formularzu.' : unavailable}</p>
     ${enabled && demo ? `<label data-voice-access${dutySession ? ' hidden' : ''}>Hasło załogi
       <input type="password" name="voicePassword" maxlength="150" autocomplete="current-password"></label>` : ''}
     <div class="duty-actions">
       <button type="button" class="primary" data-record${enabled ? '' : ' disabled'}>Nagraj raport</button>
       <button type="button" class="primary" data-stop hidden>Zakończ i wyślij do AI</button>
-      <button type="button" class="primary" data-draft hidden>Wyślij nagranie do AI</button>
+      <button type="button" class="primary" data-draft hidden>Ponów wysyłanie do AI</button>
     </div>
-    <audio data-playback controls hidden aria-label="Odsłuch nagrania"></audio>
     <p data-voice-status role="status" hidden></p>
     <div data-suggestion hidden>
       <p class="report-notes" data-suggestion-text></p>
@@ -20,48 +20,65 @@ function voiceFields(enabled, unavailable, demo) {
   </fieldset>`;
 }
 
-async function reportWav(recording) {
+async function reportSamples(recording) {
   const context = new AudioContext();
   try {
     const decoded = await context.decodeAudioData(await recording.arrayBuffer());
-    const sampleRate = 16000;
-    const size = Math.max(1, Math.min(sampleRate * maxReportSeconds, Math.round(decoded.duration * sampleRate)));
-    const mono = new OfflineAudioContext(1, size, sampleRate);
+    const size = Math.max(1, Math.round(decoded.length * reportSampleRate / decoded.sampleRate));
+    const mono = new OfflineAudioContext(1, size, reportSampleRate);
     const source = mono.createBufferSource();
     source.buffer = decoded;
     source.connect(mono.destination);
     source.start();
-    const samples = (await mono.startRendering()).getChannelData(0);
-    const buffer = new ArrayBuffer(44 + size * 2);
-    const view = new DataView(buffer);
-    view.setUint32(0, 0x52494646); // RIFF
-    view.setUint32(4, buffer.byteLength - 8, true);
-    view.setUint32(8, 0x57415645); // WAVE
-    view.setUint32(12, 0x666d7420); // fmt
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    view.setUint32(36, 0x64617461); // data
-    view.setUint32(40, size * 2, true);
-    for (let index = 0; index < size; index++) {
-      const sample = Math.max(-1, Math.min(1, samples[index]));
-      view.setInt16(44 + index * 2, sample * (sample < 0 ? 32768 : 32767), true);
-    }
-    return new Blob([buffer], {type: 'audio/wav'});
+    return (await mono.startRendering()).getChannelData(0);
   } finally {
     await context.close();
   }
+}
+
+function reportWav(samples) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  view.setUint32(0, 0x52494646); // RIFF
+  view.setUint32(4, buffer.byteLength - 8, true);
+  view.setUint32(8, 0x57415645); // WAVE
+  view.setUint32(12, 0x666d7420); // fmt
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, reportSampleRate, true);
+  view.setUint32(28, reportSampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  view.setUint32(36, 0x64617461); // data
+  view.setUint32(40, samples.length * 2, true);
+  for (let index = 0; index < samples.length; index++) {
+    const sample = Math.max(-1, Math.min(1, samples[index]));
+    view.setInt16(44 + index * 2, sample * (sample < 0 ? 32768 : 32767), true);
+  }
+  return new Blob([buffer], {type: 'audio/wav'});
+}
+
+async function generateVoiceDraft(recording, signal, session, message) {
+  const samples = await reportSamples(recording);
+  signal.throwIfAborted();
+  const count = Math.ceil(samples.length / reportChunkSize);
+  const transcripts = [];
+  for (let index = 0; index < count; index++) {
+    const offset = index * reportChunkSize;
+    message(`Rozpoznawanie mowy · część ${index + 1} z ${count}…`);
+    const {transcript} = await dutyRequest('/api/reports/transcript',
+      reportWav(samples.subarray(offset, offset + reportChunkSize)), signal, session);
+    transcripts.push(transcript);
+  }
+  message('NVIDIA przygotowuje szkic…');
+  return dutyRequest('/api/reports/draft', {transcript: transcripts.filter(Boolean).join('\n')}, signal, session);
 }
 
 function bindVoice(form) {
   const record = form.querySelector('[data-record]');
   const stop = form.querySelector('[data-stop]');
   const draft = form.querySelector('[data-draft]');
-  const playback = form.querySelector('[data-playback]');
   const status = form.querySelector('[data-voice-status]');
   const suggestion = form.querySelector('[data-suggestion]');
   const suggestionText = form.querySelector('[data-suggestion-text]');
@@ -72,10 +89,7 @@ function bindVoice(form) {
   const submit = form.querySelector('[type=submit]');
   let stream;
   let recorder;
-  let timer;
   let recording;
-  let audioUrl;
-  let sendOnStop = false;
   const lifetime = new AbortController();
   const active = () => !lifetime.signal.aborted && dialog.open && form.isConnected;
   const message = value => {
@@ -83,7 +97,6 @@ function bindVoice(form) {
     status.textContent = value;
   };
   const releaseMicrophone = () => {
-    clearTimeout(timer);
     stream?.getTracks().forEach(track => track.stop());
     stream = null;
   };
@@ -99,9 +112,6 @@ function bindVoice(form) {
     lifetime.abort();
     if (recorder?.state === 'recording') recorder.stop();
     releaseMicrophone();
-    if (audioUrl) URL.revokeObjectURL(audioUrl);
-    playback.removeAttribute('src');
-    playback.load();
   }, {once: true});
 
   if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder || !window.AudioContext || !window.OfflineAudioContext) {
@@ -125,7 +135,6 @@ function bindVoice(form) {
       recorder = new MediaRecorder(stream);
       const parts = [];
       let failed = false;
-      sendOnStop = false;
       recorder.ondataavailable = event => { if (event.data.size) parts.push(event.data); };
       recorder.onerror = () => { failed = true; };
       recorder.onstop = () => {
@@ -140,30 +149,16 @@ function bindVoice(form) {
           return;
         }
         recording = new Blob(parts, {type: recorder.mimeType});
-        audioUrl = URL.createObjectURL(recording);
-        playback.src = audioUrl;
-        playback.hidden = false;
-        draft.textContent = 'Wyślij nagranie do AI';
-        draft.hidden = false;
         record.textContent = 'Nagraj ponownie';
-        if (sendOnStop) void sendRecording();
-        else message('Minęło 30 sekund. Możesz odsłuchać lub wysłać nagranie.');
+        void sendRecording();
       };
       recorder.start();
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-      playback.removeAttribute('src');
-      playback.load();
-      audioUrl = null;
       recording = null;
-      playback.hidden = true;
       draft.hidden = true;
       suggestion.hidden = true;
       stop.hidden = false;
       message('Nagrywanie…');
       stop.focus();
-      timer = setTimeout(() => {
-        if (recorder.state === 'recording') recorder.stop();
-      }, maxReportSeconds * 1000);
     } catch {
       releaseMicrophone();
       if (active()) {
@@ -176,7 +171,6 @@ function bindVoice(form) {
   };
   stop.onclick = () => {
     if (recorder?.state !== 'recording') return;
-    sendOnStop = true;
     recorder.stop();
   };
   async function sendRecording() {
@@ -189,9 +183,7 @@ function bindVoice(form) {
     suggestion.hidden = true;
     message('NVIDIA przygotowuje szkic…');
     try {
-      const wav = await reportWav(recording);
-      if (!active()) return;
-      const result = await dutyRequest('/api/reports/draft', wav, lifetime.signal, session);
+      const result = await generateVoiceDraft(recording, lifetime.signal, session, message);
       if (!active()) return;
       if (access && !dutySession) {
         storeDutySession(session.password, session.member);
@@ -209,7 +201,7 @@ function bindVoice(form) {
       }
     } catch (error) {
       if (!active()) return;
-      draft.textContent = 'Ponów wysyłanie do AI';
+      draft.hidden = false;
       if (error.status === 401 && access) {
         clearDutySession();
         access.hidden = false;

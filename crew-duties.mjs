@@ -122,7 +122,9 @@ export function createDutyApi(db, {CREW_MEMBERS, CREW_PASSWORD, NVIDIA_API_KEY} 
     if (separator === -1 || !timingSafeEqual(hash(credentials.slice(separator + 1)), passwordHash)) {
       return fail(encoded ? 'Hasło załogi jest nieprawidłowe.' : 'Zaloguj się hasłem załogi.', 401);
     }
-    if (path === '/api/reports/draft' && request.method === 'POST') return draftReport(request, NVIDIA_API_KEY);
+    if (request.method === 'POST' && ['/api/reports/draft', '/api/reports/transcript'].includes(path)) {
+      return draftReport(request, NVIDIA_API_KEY, path === '/api/reports/transcript');
+    }
     if (!db) return fail('Wspólne zapisy wymagają bazy MongoDB.', 503);
     const memberId = credentials.slice(0, separator);
     const user = members.find(person => person.id === memberId);

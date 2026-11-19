@@ -30,7 +30,6 @@
 .sidebar .nav-group a{display:flex;align-items:center;min-height:44px;padding:8px 12px}
 .sidebar .nav-group a:hover{background:#1b3347;color:white}
 .sidebar .nav-group a[aria-current]{background:#214453;color:#b2f5ea;box-shadow:inset 3px 0 #7ee9d5}
-.on-duties .profile{display:none}
 
 .duties-page{max-width:980px}
 .duties-heading,.duty-panel-head,.duty-message,.duty-row-main,.duty-row-footer,.duty-report>header{
@@ -38,12 +37,7 @@
 }
 .duties-heading{flex-wrap:wrap;padding-bottom:18px;border-bottom:1px solid #d3dfe9}
 .duties-heading h1{margin:0;font-size:clamp(2rem,4vw,3rem);letter-spacing:-.05em}
-.duty-account,.duty-profile,.duty-actions,.duty-statuses,.duty-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
-.duty-profile{color:#344b61;font-size:.875rem;font-weight:700}
-.duty-profile select{
-  max-width:100%;border:1px solid #a6b7c7;border-radius:8px;background:#fff;color:#172538;
-  min-height:44px;padding:7px 10px
-}
+.duty-account,.duty-actions,.duty-statuses,.duty-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
 .duty-quiet{
   background:transparent;border:0;border-radius:8px;color:#275265;min-height:44px;
   padding:7px 9px;font-size:.875rem;font-weight:700
@@ -125,7 +119,7 @@
 }
 @media(max-width:540px){
   .duties-heading{gap:10px;padding-bottom:12px}
-  .duty-account,.duty-profile{gap:6px}
+  .duty-account{gap:6px}
   .duty-row,.duty-report,.duty-empty,.duty-spotlight{padding:13px}
   .duty-row-main{flex-direction:column;gap:6px}
   .duty-time{text-align:left}

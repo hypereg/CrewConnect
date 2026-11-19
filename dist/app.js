@@ -126,6 +126,8 @@ let state = JSON.parse(localStorage.getItem(storageKey) || 'null') || initial;
 const content = document.querySelector('#content');
 const dialog = document.querySelector('#dialog');
 const member = document.querySelector('#crew');
+const memberLabel = document.querySelector('label[for="crew"]');
+let sidebarRoster;
 const notice = document.querySelector('#notice');
 let noticeTimer;
 const escape = value => String(value).replace(/[&<>"']/g, char => ({
@@ -269,7 +271,6 @@ function chooseCrewProfile(profile, choice) {
 function render() {
   const page = location.hash.slice(1);
   const reports = isDutyPage(page);
-  document.body.classList.toggle('on-duties', reports);
   updateNetwork();
   const calendar = page === 'kalendarz';
   const discover = page === 'zaloga';
@@ -277,7 +278,18 @@ function render() {
     if (link.dataset.page === (calendar || reports || discover ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
-  member.value = state.member;
+  const sharedProfile = reports && hostedDuties;
+  const roster = sharedProfile ? schedule?.members : crew;
+  if (roster !== sidebarRoster || !member.options.length) {
+    member.innerHTML = sharedProfile
+      ? roster?.map(person => `<option value="${escape(person.id)}">${escape(person.name)}</option>`).join('') ||
+        '<option value="">Zaloguj się, aby wybrać</option>'
+      : crew.map(name => `<option>${escape(name)}</option>`).join('');
+    sidebarRoster = roster;
+  }
+  memberLabel.textContent = sharedProfile ? 'Profil załogi' : 'Profil demonstracyjny';
+  member.disabled = sharedProfile && !schedule;
+  member.value = sharedProfile ? schedule?.user.id || '' : state.member;
   if (discover) {
     content.innerHTML = renderCrew();
     content.querySelector('h1').tabIndex = -1;
@@ -472,10 +484,6 @@ content.addEventListener('pointercancel', finishSwipe);
 content.addEventListener('lostpointercapture', finishSwipe);
 
 content.addEventListener('change', event => {
-  if (event.target.id === 'duty-profile') {
-    changeDutyProfile(event.target.value);
-    return;
-  }
   if (event.target.id !== 'crew-gender' || !Object.keys(genderFilters).includes(event.target.value)) return;
   if (!state.crewPreferences) state.crewPreferences = {};
   state.crewPreferences[state.member] = event.target.value;
@@ -493,6 +501,10 @@ content.addEventListener('toggle', event => {
 }, true);
 
 member.addEventListener('change', () => {
+  if (isDutyPage() && hostedDuties) {
+    changeDutyProfile(member.value);
+    return;
+  }
   state.member = member.value;
   save();
 });
@@ -534,7 +546,6 @@ window.addEventListener('beforeinstallprompt', event => {
   };
 });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(console.error);
-member.innerHTML = crew.map(name => `<option>${escape(name)}</option>`).join('');
 refreshPage();
 void syncWorkspace();
 

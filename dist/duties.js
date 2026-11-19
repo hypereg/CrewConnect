@@ -134,19 +134,12 @@ function signOutDuty() {
 }
 
 function changeDutyProfile(id) {
-  if (!hostedDuties && crew.includes(id)) {
-    state.member = id;
-    save();
-    content.querySelector('#duty-profile')?.focus();
-    return;
-  }
   const person = schedule?.members.find(item => item.id === id);
   if (!person || !dutySession) return;
   ++scheduleRequest;
   storeDutySession(dutySession.password, id);
   schedule.user = person;
   render();
-  content.querySelector('#duty-profile')?.focus();
 }
 
 const dutyPerson = (data, id) => escape(data.members.find(person => person.id === id)?.name || id);
@@ -307,9 +300,6 @@ function renderDuties(page) {
   return `<div class="duties-page">
     <header class="duties-heading">${heading}
       <div class="duty-account">
-        <label class="duty-profile">Profil załogi
-          <select id="duty-profile">${data.members.map(person => `<option value="${escape(person.id)}"${person.id === data.user.id ? ' selected' : ''}>${escape(person.name)}</option>`).join('')}</select>
-        </label>
         ${hostedDuties ? '<button class="duty-quiet" data-action="duty-refresh">Odśwież</button><button class="duty-quiet" data-action="duty-logout">Wyloguj</button>' : ''}
       </div>
     </header>
