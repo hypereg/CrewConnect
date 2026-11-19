@@ -2,8 +2,8 @@ import {CORES, CORRIDORS, DECKS} from './ship-data.mjs?v=2';
 
 export const SCENE_WIDTH = 1000;
 export const SCENE_HEIGHT = 575;
-export const DECK_GAP = 108;
-const origin = {x: 104, y: 108};
+const DECK_GAP = 176;
+const origin = {x: 104, y: 159};
 const along = {x: 0.94, y: 0.17};
 const across = {x: -0.31, y: 0.60};
 const determinant = along.x * across.y - along.y * across.x;
@@ -17,12 +17,20 @@ export function projectPoint({x, y}, elevation = 0) {
   };
 }
 
-export function unprojectPoint({x, y}) {
+export function unprojectPoint({x, y}, elevation = 0) {
   const dx = x - origin.x;
-  const dy = y - origin.y;
+  const dy = y + elevation - origin.y;
   return {
     x: (across.y * dx - across.x * dy) / determinant,
     y: (along.x * dy - along.y * dx) / determinant
+  };
+}
+
+export function stackDecks(active, other) {
+  const activeIsUpper = active > other;
+  return {
+    active: {deck: active, elevation: activeIsUpper ? DECK_GAP : 0},
+    other: {deck: other, elevation: activeIsUpper ? 0 : DECK_GAP}
   };
 }
 const plans = {
@@ -130,30 +138,22 @@ function face(ctx, [first, ...rest], fill) {
   ctx.fill();
 }
 
-function building(ctx, [x, y, width, height, name, category], elevation) {
+function building(ctx, [x, y, width, height, name, category], elevation, wallHeight) {
   const [roof, ink, wall, trim] = hues[category];
   const front = {x, y: y + height};
   const corner = {x: x + width, y: y + height};
   const side = {x: x + width, y};
-  const raised = point => projectPoint(point, elevation);
-  face(ctx, [raised(side), raised(corner), projectPoint(corner), projectPoint(side)], trim);
-  face(ctx, [raised(front), raised(corner), projectPoint(corner), projectPoint(front)], wall);
-  planSpace(ctx, -elevation, () => box(ctx, x, y, width, height, roof, trim, 2));
+  const base = point => projectPoint(point, elevation);
+  const raised = point => projectPoint(point, elevation + wallHeight);
+  face(ctx, [raised(side), raised(corner), base(corner), base(side)], trim);
+  face(ctx, [raised(front), raised(corner), base(corner), base(front)], wall);
+  planSpace(ctx, -elevation - wallHeight, () => box(ctx, x, y, width, height, roof, trim, 2));
   const label = raised({x: x + width / 2, y: y + height / 2});
   text(ctx, name, label.x, label.y, ink, width > 110 ? '730 15px system-ui' : '700 12px system-ui', width * 0.88);
 }
 
-function drawNeighbor(ctx, neighbor) {
-  const {deck, elevation} = neighbor;
-  hull ??= new Path2D(hullOutline);
-  ctx.fillStyle = '#9fbdc7';
-  planSpace(ctx, 12 - elevation, () => ctx.fill(hull));
+function drawNeighbor(ctx, {deck, elevation}) {
   planSpace(ctx, -elevation, () => {
-    ctx.fillStyle = '#eff6f7';
-    ctx.fill(hull);
-    ctx.strokeStyle = '#7198a6';
-    ctx.lineWidth = 2;
-    ctx.stroke(hull);
     for (const [x, y, w, h] of plans[deck]) box(ctx, x, y, w, h, '#d8e7ec', '#b8cfd8', 3);
   });
   for (const {x} of CORES) {
@@ -163,29 +163,43 @@ function drawNeighbor(ctx, neighbor) {
   }
 }
 
-function drawHull(ctx) {
+function drawPlatform(ctx, elevation, active) {
   hull ??= new Path2D(hullOutline);
-  ctx.save();
-  ctx.shadowColor = '#1e56607a';
-  ctx.shadowBlur = 22;
-  ctx.shadowOffsetY = 10;
-  ctx.fillStyle = '#779caa';
-  planSpace(ctx, 37, () => ctx.fill(hull));
-  ctx.restore();
-  for (let depth = 34; depth >= 0; depth -= 1) {
-    ctx.fillStyle = depth === 0 ? '#f8fbfa' : depth > 26 ? '#345e6a' : depth > 20 ? '#638895' : '#c1d5d6';
-    planSpace(ctx, depth, () => ctx.fill(hull));
+  if (elevation === 0) {
+    ctx.save();
+    ctx.shadowColor = '#1e566060';
+    ctx.shadowBlur = 22;
+    ctx.shadowOffsetY = 9;
+    ctx.fillStyle = '#6c939e';
+    planSpace(ctx, 26, () => ctx.fill(hull));
+    ctx.restore();
   }
-  ctx.fillStyle = '#547481';
+  for (let depth = 24; depth >= 0; depth--) {
+    if (depth === 0) ctx.fillStyle = active ? '#f8fbfa' : '#eff6f7';
+    else if (depth > 18) ctx.fillStyle = active ? '#345e6a' : '#789daa';
+    else ctx.fillStyle = active ? '#bed3d6' : '#bcd2da';
+    planSpace(ctx, depth - elevation, () => ctx.fill(hull));
+  }
+  ctx.fillStyle = active ? '#547481' : '#789ba7';
   for (let x = 202; x < 805; x += 24) {
-    const point = projectPoint({x, y: 297}, -12);
+    const point = projectPoint({x, y: 297}, elevation - 11);
     ctx.beginPath();
     ctx.ellipse(point.x, point.y, 4.2, 2.3, 0.16, 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.strokeStyle = '#a5c2c4';
+  ctx.strokeStyle = active ? '#7ca6ac' : '#7c9fab';
   ctx.lineWidth = 2;
-  planSpace(ctx, 0, () => ctx.stroke(hull));
+  planSpace(ctx, -elevation, () => ctx.stroke(hull));
+}
+
+function drawStackGuides(ctx) {
+  ctx.save();
+  ctx.setLineDash([5, 6]);
+  ctx.lineCap = 'round';
+  for (const point of [{x: 35, y: 177}, {x: 927, y: 177}]) {
+    line(ctx, projectPoint(point, DECK_GAP), projectPoint(point), '#4a7987', 2.5);
+  }
+  ctx.restore();
 }
 
 function chevron(ctx, point, angle, size) {
@@ -204,13 +218,12 @@ function chevron(ctx, point, angle, size) {
   ctx.restore();
 }
 
-export function drawRouteArrows(canvas, step, elapsed) {
+export function drawRouteArrows(canvas, stack, step, elapsed) {
   const ctx = contextFor(canvas);
   ctx.clearRect(0, 0, SCENE_WIDTH, SCENE_HEIGHT);
   if (!step || step.type === 'arrival') return;
-  const from = projectPoint(step.point);
-  const to = step.type === 'walk' ? projectPoint(step.endPoint) :
-    projectPoint(step.point, step.goingUp ? DECK_GAP : -DECK_GAP);
+  const from = projectPoint(step.point, stack.active.elevation);
+  const to = projectPoint(step.endPoint, step.type === 'walk' ? stack.active.elevation : stack.other.elevation);
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const length = Math.hypot(dx, dy);
@@ -239,15 +252,17 @@ export function drawRouteArrows(canvas, step, elapsed) {
   ctx.globalAlpha = 1;
 }
 
-function drawCorridors(ctx) {
+function drawCorridors(ctx, elevation) {
   ctx.lineCap = 'round';
-  for (const [from, to] of CORRIDORS) line(ctx, projectPoint(from), projectPoint(to), '#dceae9', 18);
-  for (const [from, to] of CORRIDORS) line(ctx, projectPoint(from), projectPoint(to), '#fff', 13);
+  for (const [from, to] of CORRIDORS) line(ctx, projectPoint(from, elevation), projectPoint(to, elevation), '#dceae9', 18);
+  for (const [from, to] of CORRIDORS) line(ctx, projectPoint(from, elevation), projectPoint(to, elevation), '#fff', 13);
 }
 
-function drawRoute(ctx, deck, legs, step) {
+function drawRoute(ctx, stack, legs, step) {
+  const {deck, elevation} = stack.active;
+  const onDeck = point => projectPoint(point, elevation);
   const walking = legs.filter(leg => leg.type === 'walk' && leg.from.deck === deck)
-    .map(({from, to}) => [projectPoint(from), projectPoint(to)]);
+    .map(({from, to}) => [onDeck(from), onDeck(to)]);
   for (const [from, to] of walking) line(ctx, from, to, '#fff', 16);
   for (const [from, to] of walking) line(ctx, from, to, '#43877c', 9);
   for (const [from, to] of walking) {
@@ -257,14 +272,14 @@ function drawRoute(ctx, deck, legs, step) {
     chevron(ctx, {x: (from.x + to.x) / 2, y: (from.y + to.y) / 2}, Math.atan2(dy, dx), 6);
   }
   if (step?.type === 'walk') {
-    const from = projectPoint(step.point);
-    const to = projectPoint(step.endPoint);
+    const from = onDeck(step.point);
+    const to = onDeck(step.endPoint);
     line(ctx, from, to, '#fff', 19);
     line(ctx, from, to, '#075f50', 13);
   }
   if (step?.type === 'lift' || step?.type === 'stairs') {
-    const from = projectPoint(step.point);
-    const to = projectPoint(step.point, step.goingUp ? DECK_GAP : -DECK_GAP);
+    const from = onDeck(step.point);
+    const to = projectPoint(step.endPoint, stack.other.elevation);
     line(ctx, from, to, '#fff', 16);
     line(ctx, from, to, '#075f50', 11);
     ctx.beginPath();
@@ -282,7 +297,7 @@ function drawRoute(ctx, deck, legs, step) {
     const point = leg.from.deck === deck ? leg.from : leg.to.deck === deck ? leg.to : null;
     if (!point || shown.has(point.x)) continue;
     shown.add(point.x);
-    const position = projectPoint(point);
+    const position = onDeck(point);
     const selected = step?.type === leg.type && step.point.x === point.x;
     if (selected) {
       ctx.beginPath();
@@ -299,7 +314,21 @@ function drawRoute(ctx, deck, legs, step) {
   }
 }
 
-export function drawDeck(canvas, deck, neighbor, legs, step, draft) {
+function drawActive(ctx, {deck, elevation}) {
+  planSpace(ctx, -elevation, () => {
+    box(ctx, 124, 153, 738, 49, '#edf4f1', '#e0ebe7');
+  });
+  const center = projectPoint({x: 536, y: 177}, elevation);
+  text(ctx, DECKS.find(item => item.id === deck).name, center.x, center.y, '#557b72', '730 13px system-ui');
+  drawCorridors(ctx, elevation);
+  for (const room of [...plans[deck]].sort((a, b) => projectPoint({x: a[0], y: a[1]}).y -
+    projectPoint({x: b[0], y: b[1]}).y)) {
+    building(ctx, room, elevation, room[5] === 'other' ? 11 : 17);
+  }
+  for (const {x} of CORES) building(ctx, [x - 19, 158, 38, 39, '≋  ↕', 'service'], elevation, 8);
+}
+
+export function drawDeck(canvas, stack, legs, step, draft) {
   const ctx = contextFor(canvas);
   const water = ctx.createLinearGradient(0, 0, 0, SCENE_HEIGHT);
   water.addColorStop(0, '#dfeff0');
@@ -309,22 +338,17 @@ export function drawDeck(canvas, deck, neighbor, legs, step, draft) {
   for (let y = 17; y < SCENE_HEIGHT; y += 25) {
     line(ctx, {x: 0, y}, {x: SCENE_WIDTH, y}, '#a9c8cf45', 1);
   }
-  if (neighbor) drawNeighbor(ctx, neighbor);
-  drawHull(ctx);
-  planSpace(ctx, 0, () => {
-    box(ctx, 124, 153, 738, 49, '#edf4f1', '#e0ebe7');
-  });
-  const center = projectPoint({x: 536, y: 177});
-  text(ctx, DECKS.find(item => item.id === deck).name, center.x, center.y, '#557b72', '730 13px system-ui');
-  drawCorridors(ctx);
-  for (const room of [...plans[deck]].sort((a, b) => projectPoint({x: a[0], y: a[1]}).y -
-    projectPoint({x: b[0], y: b[1]}).y)) {
-    building(ctx, room, room[5] === 'other' ? 11 : 17);
+  drawStackGuides(ctx);
+  const layers = [stack.active, stack.other].sort((a, b) => a.elevation - b.elevation);
+  for (const layer of layers) {
+    const active = layer === stack.active;
+    drawPlatform(ctx, layer.elevation, active);
+    if (active) drawActive(ctx, layer);
+    else drawNeighbor(ctx, layer);
   }
-  for (const {x} of CORES) building(ctx, [x - 19, 158, 38, 39, '≋  ↕', 'service'], 8);
-  drawRoute(ctx, deck, legs, step);
-  if (draft?.deck === deck) {
-    const point = projectPoint(draft);
+  drawRoute(ctx, stack, legs, step);
+  if (draft?.deck === stack.active.deck) {
+    const point = projectPoint(draft, stack.active.elevation);
     ctx.beginPath();
     ctx.arc(point.x, point.y, 9, 0, 2 * Math.PI);
     ctx.fillStyle = '#ecbe55';
@@ -333,6 +357,6 @@ export function drawDeck(canvas, deck, neighbor, legs, step, draft) {
     ctx.lineWidth = 2;
     ctx.stroke();
   }
-  text(ctx, 'D Z I Ó B', 45, 216, '#376271', '750 11px system-ui');
-  text(ctx, 'R U F A', 954, 404, '#376271', '750 11px system-ui');
+  text(ctx, 'D Z I Ó B', 46, 178, '#376271', '750 11px system-ui');
+  text(ctx, 'R U F A', 954, 334, '#376271', '750 11px system-ui');
 }
