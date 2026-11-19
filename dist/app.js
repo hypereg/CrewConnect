@@ -204,7 +204,7 @@ function eventCard(event) {
   const shared = sharedSlots(event);
   const summary = shared.length ? 'Wspólny termin: ' + formatDate(shared[0]) :
     people.length < 2 ? 'Potrzeba co najmniej dwóch uczestników.' : 'Brak wspólnego terminu.';
-  return `<article class="card">
+  return `<article class="card" data-event-card="${escape(event.id)}" tabindex="-1">
     <span class="badge">${escape(event.type)}</span>
     <h3>${escape(event.title)}</h3>
     <p class="muted">Organizuje ${escape(displayName(event.owner, event.memberNames))}</p>
@@ -278,7 +278,8 @@ async function refreshDiscovery() {
     onlineDiscovery = next;
     if (personalDiscovery() && location.hash === '#zaloga') {
       if (changed) render();
-      if (match && !dialog.open) openCrewChat(match, true);
+      if (pendingNotificationChat) startNotificationChat();
+      else if (match && !dialog.open) openCrewChat(match, true);
     }
   } catch (error) {
     if (onlineError !== error.message) {
@@ -610,6 +611,7 @@ function render() {
   });
   activatePersonalProfile();
   updateNetwork();
+  renderNotifications();
   if (statistics) {
     content.innerHTML = renderShipStatistics();
   } else if (restaurants) {
@@ -730,6 +732,9 @@ function resetProfileSession() {
   skippedOnline.clear();
   restaurantBoard = undefined;
   shipStatistics = undefined;
+  notificationBoard = undefined;
+  notificationError = '';
+  pendingNotificationChat = undefined;
   state = {member: '', events: [], reports: []};
   render();
 }
@@ -795,11 +800,15 @@ function beginLegacyLogin() {
 
 let adminKey = '';
 let adminUsers = [];
+let adminLogs = [];
+const adminLogLabels = {create:'Dodano konto',archive:'Wyłączono konto',restore:'Przywrócono konto',
+  publish:'Opublikowano kartę',hide:'Ukryto kartę',resetCode:'Wydano kod logowania'};
 let newUserCode = '';
 
 function lockUserAdministration() {
   adminKey = '';
   adminUsers = [];
+  adminLogs = [];
   newUserCode = '';
 }
 
@@ -812,6 +821,12 @@ async function adminRequest(payload, key = adminKey) {
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'Panel jest chwilowo niedostępny.');
   return result;
+}
+
+async function refreshAdminUsers() {
+  const {users,logs} = await adminRequest();
+  adminUsers = users;
+  adminLogs = logs ?? [];
 }
 
 function renderUserAdministration() {
@@ -832,7 +847,12 @@ function renderUserAdministration() {
         `<button class="secondary" data-action="admin-${user.published ? 'hide' : 'publish'}" data-id="${user.id}">${user.published ? 'Ukryj kartę' : 'Opublikuj kartę'}</button>
         <button class="secondary" data-action="admin-resetCode" data-id="${user.id}">Wydaj kod logowania</button>
         <button class="secondary" data-action="admin-archive" data-id="${user.id}">Usuń z aktywnych</button>`}</footer></article>`).join('') ||
-      '<p>Brak użytkowników.</p>'}</div>`;
+      '<p>Brak użytkowników.</p>'}</div>
+    <section class="card admin-audit"><h2>Dziennik operacji</h2>
+      ${adminLogs.length ? `<ol>${adminLogs.map(log => `<li>
+        <div><strong>${escape(adminLogLabels[log.action] || log.action)}</strong><span>${escape(log.name)}</span></div>
+        <time datetime="${escape(log.at)}">${notificationTime.format(new Date(log.at))}</time></li>`).join('')}</ol>` :
+        '<p class="muted">Brak zapisanych operacji.</p>'}</section>`;
 }
 
 async function handleUserAdministration(action, id) {
@@ -844,6 +864,7 @@ async function handleUserAdministration(action, id) {
         const result = await adminRequest(null, key);
         adminKey = key;
         adminUsers = result.users;
+        adminLogs = result.logs ?? [];
         render();
       });
     return;
@@ -854,7 +875,7 @@ async function handleUserAdministration(action, id) {
       '<label>O Tobie na pokładzie (opcjonalnie) <input name="role" maxlength="60" placeholder="Np. pasażerka, podróżuję z rodziną"></label>', 'Dodaj konto', async data => {
         const result = await adminRequest({action: 'create', name: data.get('name'), role: data.get('role')});
         newUserCode = result.code;
-        adminUsers = (await adminRequest()).users;
+        await refreshAdminUsers();
         render();
       });
     return;
@@ -877,7 +898,7 @@ async function handleUserAdministration(action, id) {
   try {
     const result = await adminRequest({action: operation, id});
     if (result.code) newUserCode = result.code;
-    adminUsers = (await adminRequest()).users;
+    await refreshAdminUsers();
     render();
     announce('Zapisano zmianę konta.');
   } catch (error) {
@@ -931,6 +952,7 @@ function editUserProfile(publishOnline = false) {
     state.userProfile = updatedProfile;
     activatePersonalProfile();
     save('Zapisano profil.');
+    void loadNotifications();
     if (publishOnline) void refreshDiscovery();
   });
   dialog.addEventListener('close', () => {
@@ -1250,6 +1272,7 @@ window.addEventListener('beforeinstallprompt', event => {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(console.error);
 refreshPage();
 void syncWorkspace();
+void loadNotifications();
 
 void refreshEvents();
 window.addEventListener('focus', refreshEvents);
