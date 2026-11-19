@@ -81,7 +81,7 @@ export default async function restaurants(req, res) {
           {$project:{_id:0,restaurantId:'$_id',average:1,count:1,latest:1}}]).toArray(),
         user ? reviews.find({owner:session},{projection:{_id:0,restaurantId:1,rating:1,comment:1}}).toArray() : [],
         user ? coupons.find({owner:session,bookingId:{$exists:false},expiresAt:{$gt:new Date()}},
-          {projection:{_id:0,id:1,restaurantId:1,percent:1}}).toArray() : []
+          {projection:{_id:0,id:1,restaurantId:1,percent:1,freeItem:1}}).toArray() : []
       ]);
       return send(res,200,{restaurants:[...restaurantExamples,...custom],times,reservations,ratings,ownReviews,ownCoupons,canBook:Boolean(user)});
     }
@@ -148,11 +148,13 @@ export default async function restaurants(req, res) {
             const coupon = await coupons.findOneAndUpdate({_id:couponId,owner:session,restaurantId,bookingId:{$exists:false},expiresAt:{$gt:new Date()}},
               {$set:{bookingId:booking.id}},{session:transaction});
             if (!coupon) return null;
-            await bookings.insertOne({...stored,couponId,discount:coupon.percent},{session:transaction});
+            const reward = coupon.freeItem ? {freeItem:coupon.freeItem} : {discount:coupon.percent};
+            await bookings.insertOne({...stored,couponId,...reward},{session:transaction});
             return coupon;
           }));
           if (!redeemed) return send(res,409,{error:'Ten kupon jest nieważny lub został już użyty.'});
-          booking.discount = redeemed.percent;
+          if (redeemed.freeItem) booking.freeItem = redeemed.freeItem;
+          else booking.discount = redeemed.percent;
         } else {
           await bookings.insertOne(stored);
         }

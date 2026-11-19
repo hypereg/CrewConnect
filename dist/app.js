@@ -591,6 +591,7 @@ function chooseCrewProfile(profile, choice) {
 }
 
 function render() {
+  if (location.hash === '#gry') history.replaceState(null, '', '#restauracje');
   if (location.hash === '#konto') history.replaceState(null, '', '#profil');
   const page = location.hash.slice(1);
   const reports = isDutyPage(page);
@@ -601,10 +602,9 @@ function render() {
   const administration = page === 'administracja';
   const restaurants = page === 'restauracje';
   const statistics = page === 'statystyki';
-  const games = page === 'gry';
   const map = page === 'mapa';
   const activePage = administration ? 'profil' :
-    (calendar || reports || discover || profile || map || restaurants || statistics || games ? page : 'aktywnosci');
+    (calendar || reports || discover || profile || map || restaurants || statistics ? page : 'aktywnosci');
   content.classList.toggle('map-content', map);
   document.querySelectorAll('[data-page]').forEach(link => {
     if (link.dataset.page === activePage) link.setAttribute('aria-current', 'page');
@@ -613,9 +613,7 @@ function render() {
   activatePersonalProfile();
   updateNetwork();
   renderNotifications();
-  if (games) {
-    content.innerHTML = renderGames();
-  } else if (statistics) {
+  if (statistics) {
     content.innerHTML = renderShipStatistics();
   } else if (restaurants) {
     content.innerHTML = renderRestaurants();
@@ -735,7 +733,7 @@ function resetProfileSession() {
   skippedOnline.clear();
   restaurantBoard = undefined;
   shipStatistics = undefined;
-  resetGameSession();
+  resetWelcomeDraw();
   notificationBoard = undefined;
   notificationError = '';
   pendingNotificationChat = undefined;
@@ -1040,8 +1038,8 @@ content.addEventListener('click', e => {
   const button = e.target.closest('button[data-action]');
   if (!button) return;
   const {action, id} = button.dataset;
-  if (action.startsWith('game-')) {
-    handleGameAction(action, id);
+  if (action === 'welcome-draw' || action === 'welcome-draw-refresh') {
+    void (action === 'welcome-draw' ? drawWelcomeReward() : loadWelcomeDraw());
     return;
   }
   if (action === 'statistics-refresh') {
@@ -1207,7 +1205,6 @@ content.addEventListener('pointercancel', finishSwipe);
 content.addEventListener('lostpointercapture', finishSwipe);
 
 content.addEventListener('change', event => {
-  if (event.target.id === 'roulette-color') rouletteChoice = event.target.value;
   const {id, value} = event.target;
   if (id === 'crew-intent' || id === 'crew-interest') {
     if (!state.discoveryFilters) state.discoveryFilters = {};
@@ -1235,9 +1232,11 @@ content.addEventListener('toggle', event => {
 
 function refreshPage() {
   render();
-  if (location.hash === '#restauracje') void loadRestaurants();
+  if (location.hash === '#restauracje') {
+    void loadRestaurants();
+    void loadWelcomeDraw();
+  }
   if (location.hash === '#statystyki') void loadShipStatistics();
-  if (location.hash === '#gry') void loadGameBoard();
   void refreshDiscovery();
   if (isDutyPage() && state.userProfile) void loadDuties();
 }
@@ -1292,7 +1291,7 @@ setInterval(() => { if (!document.hidden) void refreshDiscovery(); }, 3000);
 window.addEventListener('online', refreshEvents);
 window.addEventListener('online', loadRestaurants);
 window.addEventListener('online', loadShipStatistics);
-window.addEventListener('online', loadGameBoard);
+window.addEventListener('online', loadWelcomeDraw);
 setInterval(() => { if (!document.hidden) void refreshEvents(); }, 15000);
 
 const mobileMenu = document.querySelector('.mobile-menu-toggle');

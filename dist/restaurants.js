@@ -36,7 +36,8 @@ function renderRestaurants() {
   const hero = `<header class="restaurant-hero"><div><h1>Restauracje na pokładzie</h1>
     <p>Sprawdź menu, zaplanuj wspólny posiłek i podziel się opinią.</p></div>
     ${canBook ? '<button type="button" class="primary" data-action="restaurant-add">+ Dodaj restaurację</button>' : ''}</header>`;
-  if (!board) return hero + (error ? error + '<button class="secondary" data-action="restaurant-refresh">Spróbuj ponownie</button>' : '<p role="status">Ładowanie restauracji…</p>');
+  const welcome = renderWelcomeDraw();
+  if (!board) return hero + welcome + (error ? error + '<button class="secondary" data-action="restaurant-refresh">Spróbuj ponownie</button>' : '<p role="status">Ładowanie restauracji…</p>');
   const ratingByRestaurant = new Map((board.ratings ?? []).map(rating => [rating.restaurantId,rating]));
   const ownReviewIds = new Set((board.ownReviews ?? []).map(review => review.restaurantId));
   const cards = board.restaurants.map(place => {
@@ -61,11 +62,11 @@ function renderRestaurants() {
   }).join('');
   const bookings = canBook ? `<section class="restaurant-bookings"><h2>Moje rezerwacje</h2>
     ${board.reservations.length ? board.reservations.map(item => `<article class="card restaurant-booking">
-      <div><h3>${escape(item.restaurantName)}</h3><p>${formatDate(item.date + 'T' + item.time)} · stolik ${item.table} · osób: ${item.guests}${item.discount ? ` · kupon −${item.discount}%` : ''}</p></div>
+      <div><h3>${escape(item.restaurantName)}</h3><p>${formatDate(item.date + 'T' + item.time)} · stolik ${item.table} · osób: ${item.guests}${item.freeItem ? ` · darmowy deser: ${escape(item.freeItem)}` : item.discount ? ` · kupon −${item.discount}%` : ''}</p></div>
       <button class="secondary" data-action="restaurant-cancel" data-id="${escape(item.id)}">Anuluj rezerwację</button>
     </article>`).join('') : '<p class="muted">Nie masz nadchodzących rezerwacji.</p>'}
   </section>` : '';
-  return hero + error + `<div class="restaurant-grid">${cards}</div>` + bookings;
+  return hero + welcome + error + `<div class="restaurant-grid">${cards}</div>` + bookings;
 }
 
 function parseRestaurantMenu(value) {
@@ -102,8 +103,8 @@ async function handleRestaurantAction(action, id) {
       <label>Data <input type="date" name="date" min="${dateValue()}" max="${dateValue(30)}" value="${dateValue()}" required></label>
       <label>Godzina <select name="time">${restaurantBoard.times.map(time => `<option>${escape(time)}</option>`).join('')}</select></label>
       <label>Liczba osób <input type="number" name="guests" min="1" max="${Math.max(...place.tables)}" value="2" required></label>
-      ${applicable.length ? `<label>Kupon <select name="couponId"><option value="">Bez kuponu</option>
-        ${applicable.map(coupon => `<option value="${escape(coupon.id)}">−${coupon.percent}%</option>`).join('')}</select></label>` : ''}`,
+      ${applicable.length ? `<label>Bon lub kupon <select name="couponId"><option value="">Bez bonu lub kuponu</option>
+        ${applicable.map(coupon => `<option value="${escape(coupon.id)}">${escape(restaurantCouponLabel(coupon))}</option>`).join('')}</select></label>` : ''}`,
       'Potwierdź rezerwację', data => finish({action:'reserve',restaurantId:id,date:data.get('date'),time:data.get('time'),guests:Number(data.get('guests')),couponId:data.get('couponId')},'Stolik zarezerwowany.'));
   } else if (action === 'restaurant-review' && place) {
     const review = restaurantBoard.ownReviews?.find(item => item.restaurantId === id);
