@@ -710,7 +710,7 @@ async function mutate(payload, {message, after, onError} = {}) {
     else if (message) announce(message);
     if (print) showResult('Zaproszenie do kabiny', '<div class="qr-print"><h3>' + escape(print.voyage) +
       '</h3><p>Kabina ' + escape(print.cabin) + '</p><img width="250" height="250" alt="Kod QR do rejestracji" src="' +
-      escape(print.image) + '"><p>Zeskanuj, aby dołączyć do rejsu.</p><a href="' + escape(print.url) + '">' +
+      escape(print.image) + '"><p>Zeskanuj, aby się zarejestrować i dołączyć do tej kabiny.</p><a href="' + escape(print.url) + '">' +
       escape(print.url) + '</a></div>', '<button type="button" class="button primary" data-print>Drukuj</button>');
     if (plannerCode) showResult('Dostęp plannera', '<p>Przekaż plannerowi e-mail i kod.</p><p>' + escape(plannerEmail) +
       '</p><p><strong class="access-code">' + escape(plannerCode) + '</strong></p>');

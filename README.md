@@ -3,7 +3,7 @@
 ## Wspólne demo wydarzeń
 
 1. Użyj Node.js 22 lub nowszego, uruchom `npm ci` i `npm start`, a potem otwórz `http://localhost:3000`.
-2. W lokalnym demie zaloguj się jako `admin@example.test` z kodem `12345`. W panelu admina utwórz rejs, dodaj kabiny z listy lub zakresu (np. `101–110, A12`) i wygeneruj ich kody QR. W sekcji **Konta** utwórz plannera i zapisz jego indywidualny kod.
+2. W lokalnym demie zaloguj się jako `admin@example.test` z kodem `12345`. W panelu admina utwórz rejs, dodaj kabiny z listy lub zakresu (np. `101–110, A12`) i wygeneruj ich kody QR. Wydrukuj QR dla każdej kabiny i powieś go w tej kabinie. Kolejni goście używają tego samego zaproszenia, aż do zapełnienia miejsc. W sekcji **Konta** utwórz plannera i zapisz jego indywidualny kod.
 3. Otwórz link zaproszenia lub zeskanuj kod QR od administratora. Podaj nazwę i testowy e-mail, żeby założyć konto gościa. Przy ponownym logowaniu podaj ten sam e-mail. Skopiuj sześciocyfrowy kod z powiadomienia w przeglądarce i wpisz go w formularzu. Kod jest jednorazowy i ważny przez 10 minut.
 
 Otwieraj aplikację pod adresem serwera, np. `http://localhost:3000`. Uruchomiony serwer obsługuje logowanie, wydarzenia i rejestrację z QR.
