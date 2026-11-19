@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import events from './api/events.mjs';
 import places from './api/places.mjs';
 import connections from './api/connections.mjs';
+import users from './api/users.mjs';
 import workspace from './api/workspace.mjs';
 import social from './api/social.mjs';
 import { handleDutyRequest, isDutyRoute } from './duty-http.mjs';
@@ -36,6 +37,7 @@ createServer(async (req, res) => {
     if (path === '/api/events') return await events(req, res);
     if (path === '/api/places') return await places(req, res);
     if (path === '/api/connections') return await connections(req, res);
+    if (path === '/api/users') return await users(req, res);
     if (path === '/api/workspace') return await workspace(req, res);
     if (path === '/api/social') return await social(req, res);
     if (isDutyRoute(path)) return await handleDutyRequest(path, req, res);

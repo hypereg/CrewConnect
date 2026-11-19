@@ -28,7 +28,7 @@ export function validProfile(profile) {
     profile.interests.every(interest => typeof interest === 'string' && interest.trim() && interest.length <= 28);
 }
 
-const recoveryDigest = code => createHash('sha256').update('crewconnect-recovery:' + code).digest('hex');
+export const recoveryDigest = code => createHash('sha256').update('crewconnect-recovery:' + code).digest('hex');
 const workspaceId = req => req.headers.cookie?.match(/(?:^|; *)crew_workspace=([a-f0-9]{64})(?:;|$)/)?.[1];
 function setWorkspaceCookie(res, id) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
@@ -56,13 +56,13 @@ async function accountSession(req, res) {
   if (data.action === 'logout') {
     const id = workspaceId(req);
     if (!id) return res.writeHead(401).end();
-    const result = await store.updateOne({_id: id, 'snapshot.userProfile.id': {$exists: true}}, {$set: {recovery}});
+    const result = await store.updateOne({_id: id, archived: {$ne: true}, 'snapshot.userProfile.id': {$exists: true}}, {$set: {recovery}});
     if (!result.matchedCount) return res.writeHead(409).end();
     setWorkspaceCookie(res, '');
     return res.writeHead(204).end();
   }
   if (data.action === 'login') {
-    const account = await store.findOneAndUpdate({recovery}, {$unset: {recovery: ''}}, {projection: {_id: 1, snapshot: 1}});
+    const account = await store.findOneAndUpdate({recovery, archived: {$ne: true}}, {$unset: {recovery: ''}}, {projection: {_id: 1, snapshot: 1}});
     if (!account) return res.writeHead(401).end();
     setWorkspaceCookie(res, account._id);
     return res.writeHead(200, {'Content-Type': 'application/json'}).end(JSON.stringify(account.snapshot));
@@ -96,7 +96,8 @@ export default async function workspace(req, res) {
       }
     }
     if (req.method === 'GET') {
-      const workspace = await workspaceDatabase().collection('workspaces').findOne({_id: id}, {projection: {snapshot: 1}});
+      const workspace = await workspaceDatabase().collection('workspaces').findOne({_id: id}, {projection: {snapshot: 1, archived: 1}});
+      if (workspace?.archived) return res.writeHead(403).end();
       return res.writeHead(200, {'Content-Type': 'application/json'}).end(JSON.stringify(workspace?.snapshot ?? null));
     }
     if (req.headers['content-type']?.split(';')[0] !== 'application/json') return res.writeHead(415).end();
@@ -122,14 +123,15 @@ export default async function workspace(req, res) {
       return res.writeHead(400).end();
     }
     const db = workspaceDatabase();
-    const filter = {_id: id};
-    const previous = await db.collection('workspaces').findOne(filter, {projection: {'snapshot.userProfile': 1}});
+    const filter = {_id: id, archived: {$ne: true}};
+    const previous = await db.collection('workspaces').findOne({_id: id}, {projection: {'snapshot.userProfile': 1, archived: 1}});
+    if (previous?.archived) return res.writeHead(403).end();
     const updated = snapshot.userProfile;
     if (updated && JSON.stringify(previous?.snapshot?.userProfile) !== JSON.stringify(updated)) {
       await db.collection('discovery_profiles').updateOne({_id: discoveryId(id)}, {$set: discoveryFields(updated)});
     }
     await db.collection('workspaces').updateOne(
-      {_id: id},
+      filter,
       {$set: {snapshot, updatedAt: new Date()}},
       {upsert: true}
     );
