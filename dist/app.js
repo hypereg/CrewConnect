@@ -598,15 +598,20 @@ function render() {
   const discover = page === 'zaloga';
   const profile = page === 'profil';
   const administration = page === 'administracja';
+  const restaurants = page === 'restauracje';
   const map = page === 'mapa';
   content.classList.toggle('map-content', map);
   document.querySelectorAll('[data-page]').forEach(link => {
-    if (link.dataset.page === (calendar || reports || discover || profile || map ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
+    if (link.dataset.page === (calendar || reports || discover || profile || map || administration || restaurants ? page : 'aktywnosci')) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
   activatePersonalProfile();
   updateNetwork();
-  if (map) {
+  if (restaurants) {
+    content.innerHTML = renderRestaurants();
+  } else if (administration) {
+    content.innerHTML = renderUserAdministration();
+  } else if (map) {
     if (!content.querySelector('.ship-map-frame')) {
       content.innerHTML = '<iframe class="ship-map-frame" title="Mapa statku" src="navigation.html?embed=1"></iframe>';
     }
@@ -717,6 +722,7 @@ function resetProfileSession() {
   onlineSearch = '';
   onlineError = '';
   skippedOnline.clear();
+  restaurantBoard = undefined;
   state = {member: '', events: [], reports: []};
   render();
 }
@@ -997,6 +1003,10 @@ content.addEventListener('click', e => {
   const button = e.target.closest('button[data-action]');
   if (!button) return;
   const {action, id} = button.dataset;
+  if (action.startsWith('restaurant-')) {
+    void handleRestaurantAction(action, id);
+    return;
+  }
   if (action.startsWith('admin-')) {
     void handleUserAdministration(action, id);
     return;
@@ -1179,6 +1189,7 @@ content.addEventListener('toggle', event => {
 
 function refreshPage() {
   render();
+  if (location.hash === '#restauracje') void loadRestaurants();
   void refreshDiscovery();
   if (isDutyPage() && state.userProfile) void loadDuties();
 }
@@ -1230,6 +1241,7 @@ window.addEventListener('focus', refreshDiscovery);
 window.addEventListener('online', refreshDiscovery);
 setInterval(() => { if (!document.hidden) void refreshDiscovery(); }, 3000);
 window.addEventListener('online', refreshEvents);
+window.addEventListener('online', loadRestaurants);
 setInterval(() => { if (!document.hidden) void refreshEvents(); }, 15000);
 
 const mobileMenu = document.querySelector('.mobile-menu-toggle');
