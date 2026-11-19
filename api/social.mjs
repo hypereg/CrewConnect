@@ -105,6 +105,31 @@ function publicProfile(person) {
   return {id, name, bio, interests};
 }
 
+function cabinLabels(value) {
+  const input = text(value, 4096, 'Numery kabin');
+  const labels = [];
+  const seen = new Set();
+  function add(label) {
+    const key = label.toLowerCase();
+    if (seen.has(key)) fail(400, 'Powtórzony numer kabiny: ' + label + '.');
+    if (labels.length === 200) fail(400, 'W jednej partii możesz dodać maksymalnie 200 kabin.');
+    labels.push(text(label, 24, 'Numer kabiny'));
+    seen.add(key);
+  }
+  for (const item of input.split(/[\n,;]+/).map(part => part.trim()).filter(Boolean)) {
+    const range = /^(\d{1,8})\s*[-–]\s*(\d{1,8})$/.exec(item);
+    if (!range) { add(item); continue; }
+    const [, first, last] = range;
+    const start = Number(first), end = Number(last);
+    if (end < start) fail(400, 'Podaj rosnący zakres kabin: ' + item + '.');
+    if (end - start + 1 > 200 - labels.length) fail(400, 'W jednej partii możesz dodać maksymalnie 200 kabin.');
+    const width = /^0\d/.test(first) || /^0\d/.test(last) ? Math.max(first.length, last.length) : 0;
+    for (let n = start; n <= end; n++) add(String(n).padStart(width, '0'));
+  }
+  if (!labels.length) fail(400, 'Wpisz co najmniej jeden numer kabiny.');
+  return labels;
+}
+
 function board(state, user) {
   if (!user) return {user: null};
   const voyage = activeVoyage(state);
@@ -170,13 +195,13 @@ function login(state, body) {
   return user.id;
 }
 
-function register(state, body) {
+function register(state, body, signedIn) {
   const address = email(body.email);
   const name = text(body.name, 60, 'Nazwa wyświetlana');
-  if (!equal(body.code, guestCode)) fail(400, 'Wpisz kod demo 123456.');
   const {voyage, cabin} = invitation(state, body.token, false);
   let user = state.accounts.find(person => person.email === address);
   if (address === admin.email || (user && user.role !== 'guest')) fail(409, 'Użyj innego testowego adresu e-mail.');
+  if (user && signedIn?.id !== user.id) fail(409, 'Masz już konto z tym adresem. Zaloguj się, aby dołączyć z zaproszenia.');
   const current = membership(user, voyage);
   if (current?.cabinId === cabin.id) return user.id;
   if (current) fail(409, 'To konto jest przypisane do innej kabiny.');
@@ -203,14 +228,16 @@ function adminAction(state, body, voyage, origin) {
       voyage.active = false;
       voyage.closedAt = new Date().toISOString();
       return {};
-    case 'addCabin': {
+    case 'addCabin':
+    case 'addCabins': {
       if (!voyage || voyage.id !== body.voyageId) fail(409, 'Odśwież aktywny rejs.');
-      const label = text(body.label, 24, 'Numer kabiny');
-      if (state.cabins.some(item => item.voyageId === voyage.id && item.label.toLowerCase() === label.toLowerCase())) {
-        fail(409, 'Ta kabina już istnieje w tym rejsie.');
-      }
-      state.cabins.push({id: randomUUID(), voyageId: voyage.id, label, capacity: number(body.capacity, 1, 20, 'Liczba gości')});
-      return {};
+      const labels = body.action === 'addCabin' ? [text(body.label, 24, 'Numer kabiny')] : cabinLabels(body.labels);
+      const capacity = number(body.capacity, 1, 20, 'Liczba gości');
+      const existing = new Set(state.cabins.filter(item => item.voyageId === voyage.id).map(item => item.label.toLowerCase()));
+      const duplicate = labels.find(label => existing.has(label.toLowerCase()));
+      if (duplicate) fail(409, 'Kabina ' + duplicate + ' już istnieje w tym rejsie.');
+      state.cabins.push(...labels.map(label => ({id: randomUUID(), voyageId: voyage.id, label, capacity})));
+      return {addedCabins: labels.length};
     }
     case 'issueQr':
     case 'revokeQr': {
@@ -340,7 +367,7 @@ function memberAction(state, body, user, voyage) {
   }
 }
 
-const adminActions = new Set(['createVoyage', 'closeVoyage', 'addCabin', 'issueQr', 'revokeQr',
+const adminActions = new Set(['createVoyage', 'closeVoyage', 'addCabin', 'addCabins', 'issueQr', 'revokeQr',
   'createPlanner', 'togglePlanner', 'resetPlannerCode']);
 
 async function readBody(req) {
@@ -385,7 +412,8 @@ export default async function social(req, res) {
       return send(200, {user: null});
     }
     if (body?.action === 'login' || body?.action === 'register') {
-      const id = body.action === 'login' ? login(await store.read(), body) : await store.change(state => register(state, body));
+      const id = body.action === 'login' ? login(await store.read(), body) :
+        await store.change(state => register(state, body, session(req, state)));
       const state = await store.read();
       const account = id === admin.id ? admin : state.accounts.find(item => item.id === id && item.active);
       setSession(res, account);

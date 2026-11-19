@@ -1,6 +1,10 @@
 const content = document.querySelector('#content');
 const nav = document.querySelector('#navigation');
+const sidebarProfile = document.querySelector('#sidebar-profile');
+const sidebarAccount = document.querySelector('#sidebar-account');
+const sidebarUserName = document.querySelector('#sidebar-user-name');
 const roleLink = document.querySelector('#role-link');
+const mapLink = document.querySelector('#ship-map-link');
 const tripLabel = document.querySelector('#trip-label');
 const connection = document.querySelector('#connection');
 const dialog = document.querySelector('#dialog');
@@ -13,9 +17,7 @@ const categories = ['Gry', 'Trening', 'Integracja', 'Inne'];
 const categoryIcons = {Gry: 'gamepad', Trening: 'activity', Integracja: 'users', Inne: 'star'};
 const icons = {
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
-  ticket: '<path d="M3 7h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4V7Z"/><path d="M14 7v2m0 6v2m0-6v2"/>',
   users: '<path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2m18 0v-2a4 4 0 0 0-3-4"/><circle cx="10" cy="7" r="4"/><path d="M17 3a4 4 0 0 1 0 8"/>',
-  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2"/>',
   pin: '<path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
   arrow: '<path d="M9 18l6-6-6-6"/>',
   back: '<path d="m14 18-6-6 6-6"/>',
@@ -25,8 +27,8 @@ const icons = {
   star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/>'
 };
 const links = [
-  ['wydarzenia', 'Wydarzenia', 'calendar'], ['moje-zapisy', 'Moje zapisy', 'ticket'],
-  ['poznaj', 'Poznaj', 'users'], ['konto', 'Konto', 'user']
+  ['wydarzenia', 'Wydarzenia'], ['kalendarz', 'Kalendarz'], ['poznaj', 'Poznaj załogę'],
+  ['mapa', 'Mapa statku'], ['moje-zapisy', 'Moje zapisy']
 ];
 
 const icon = name => '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + icons[name] + '</svg>';
@@ -51,7 +53,6 @@ let offline = false;
 let cachedAt;
 let connectionError;
 let invite;
-let mode = 'list';
 let month;
 let day;
 let adminTab = 'voyages';
@@ -103,9 +104,6 @@ function route() {
 function navigate(target) {
   if (location.hash === '#' + target) render(true);
   else location.hash = target;
-}
-function time(value, options = {}) {
-  return new Intl.DateTimeFormat('pl-PL', {timeZone: board.voyage?.timeZone || 'Europe/Warsaw', ...options}).format(new Date(value));
 }
 const eventDay = event => event.localTime.slice(0, 10);
 const eventTime = event => event.localTime.slice(11, 16);
@@ -197,15 +195,15 @@ function renderLogin(page) {
   const emailField = field('Testowy adres e-mail', 'email', '', 'type="email" autocomplete="username" required maxlength="120"');
   const codeField = field('Kod dostępu', 'code', '', 'type="password" autocomplete="current-password" required maxlength="100"');
   if (page === 'rejestracja') {
-    return '<div class="auth-view">' + back('logowanie', 'Logowanie') +
+    const login = 'logowanie?kod=' + encodeURIComponent(route().token || '');
+    return '<div class="auth-view">' + back(login, 'Mam już konto') +
       renderHeading('Dołącz do rejsu', invite?.cabin ? escape(invite.voyage) : '') +
       (invite?.cabin ? card('<div class="cabin-label">' + icon('pin') + '<div><small>Kabina z zaproszenia</small><strong>' +
         escape(invite.cabin) + '</strong></div></div>' +
         (invite.full ? '<p>Wszystkie miejsca w tej kabinie zostały wykorzystane. Jeśli masz już konto, zaloguj się.</p>' +
-          '<a class="button secondary" href="#logowanie">Przejdź do logowania</a>' :
+          '<a class="button secondary" href="#' + login + '">Przejdź do logowania</a>' :
           form('register', field('Nazwa wyświetlana', 'name', '', 'autocomplete="nickname" required maxlength="60"') +
-            emailField + field('Kod demo', 'code', '', 'inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required') +
-            '<p class="input-note">Wpisz kod <strong>123456</strong>.</p>', submit('Utwórz konto')))) :
+            emailField, submit(board?.user?.role === 'guest' ? 'Dołącz do rejsu' : 'Utwórz konto')))) :
         empty(invite?.error ? 'Zaproszenie niedostępne' : 'Sprawdzamy zaproszenie', escape(invite?.error || 'To potrwa chwilę.'))) + '</div>';
   }
   return '<div class="auth-view">' + renderHeading('Życie na pokładzie', 'Zaloguj się, aby zobaczyć wydarzenia swojego rejsu.') +
@@ -244,38 +242,59 @@ function eventCard(event, panel = false) {
 
 const eventGrid = (events, panel = false) => '<div class="event-grid">' + events.map(event => eventCard(event, panel)).join('') + '</div>';
 
-function calendar(events) {
-  const today = time(Date.now(), {year: 'numeric', month: '2-digit', day: '2-digit'}).split('.').reverse().join('-');
+function todayDate() {
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: board.voyage?.timeZone || 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date());
+}
+
+function renderCalendar() {
+  const events = activeEvents().filter(event => event.status === 'published').sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const today = todayDate();
   day ||= today;
   month ||= day.slice(0, 7);
   const first = new Date(month + '-01T12:00Z');
   const offset = (first.getUTCDay() + 6) % 7;
-  const days = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
-  const daysWithEvents = new Set(events.map(eventDay));
-  const cells = Array.from({length: days}, (_, i) => {
-    const date = month + '-' + String(i + 1).padStart(2, '0');
-    return '<button type="button" data-action="day" data-id="' + date + '" aria-pressed="' + (day === date) +
-      '" aria-label="' + previewDate(date) + (daysWithEvents.has(date) ? ', wydarzenia' : '') + '"' +
-      (today === date ? ' aria-current="date"' : '') + '>' + (i + 1) + (daysWithEvents.has(date) ? '<i></i>' : '') + '</button>';
+  const eventsByDay = new Map();
+  for (const event of events) {
+    const date = eventDay(event);
+    if (!eventsByDay.has(date)) eventsByDay.set(date, []);
+    eventsByDay.get(date).push(event);
+  }
+  const cells = Array.from({length: 42}, (_, i) => {
+    const cell = new Date(first);
+    cell.setUTCDate(i - offset + 1);
+    const date = cell.toISOString().slice(0, 10);
+    const listings = eventsByDay.get(date) || [];
+    return '<button type="button" class="calendar-day' + (date.startsWith(month) ? '' : ' outside') + '" data-action="day" data-id="' +
+      date + '" aria-pressed="' + (day === date) + '" aria-label="' + previewDate(date) + ', liczba wydarzeń: ' +
+      listings.length + '"' + (today === date ? ' aria-current="date"' : '') + '><span class="day-number">' + cell.getUTCDate() + '</span>' +
+      listings.slice(0, 2).map(event =>
+        '<span class="calendar-event">' + eventTime(event) + ' ' + escape(event.title) + '</span>').join('') +
+      (listings.length > 2 ? '<span class="calendar-more">+' + (listings.length - 2) + '</span>' : '') + '</button>';
   }).join('');
   const label = new Intl.DateTimeFormat('pl-PL', {timeZone: 'UTC', month: 'long', year: 'numeric'}).format(first);
-  const daily = events.filter(event => eventDay(event) === day);
-  return card('<div class="calendar-title"><h2>' + label + '</h2><div class="button-row">' +
-      button(icon('back'), 'month', '-1', 'aria-label="Poprzedni miesiąc"') +
-      button(icon('arrow'), 'month', '1', 'aria-label="Następny miesiąc"') +
-      '</div></div><div class="calendar-grid">' + ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'So', 'Nd'].map(text => '<span>' + text + '</span>').join('') +
-      '<span aria-hidden="true"></span>'.repeat(offset) + cells + '</div>', 'calendar') +
-    '<h2 class="section-title date-heading">' + previewDate(day) + '</h2>' +
-    (daily.length ? eventGrid(daily) : empty('Brak wydarzeń tego dnia'));
+  const agenda = (eventsByDay.get(day) || []).map(event => '<article class="agenda-item"><time datetime="' +
+    escape(event.startsAt) + '">' + eventTime(event) + '</time><div><h3>' + escape(event.title) + '</h3><p>' +
+    escape(event.place) + ' · ' + escape(availability(event)) + '</p></div>' +
+    '<a class="button secondary" href="#wydarzenie/' + escape(event.id) + '">Szczegóły</a></article>').join('');
+  return '<section class="calendar" aria-labelledby="calendar-title"><header class="calendar-header">' +
+      '<div><h1 id="calendar-title" tabindex="-1">Wspólny kalendarz załogi</h1><h2>' + label + '</h2></div><div class="calendar-controls">' +
+      button('Dzisiaj', 'today', '', '', 'secondary') +
+      button('‹', 'month', '-1', 'aria-label="Poprzedni miesiąc"', 'secondary') +
+      button('›', 'month', '1', 'aria-label="Następny miesiąc"', 'secondary') +
+      '</div></header><div class="calendar-grid">' + ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd']
+        .map(text => '<span class="weekday">' + text + '</span>').join('') +
+      cells + '</div></section>' +
+    card('<header><h2>' + previewDate(day) + '</h2></header>' +
+      (agenda || '<p>Tego dnia nie ma wspólnych wydarzeń.</p>'), 'agenda');
 }
 
 function renderEvents() {
   const events = upcoming();
   return renderHeading('Wydarzenia', 'Spotkania i aktywności na pokładzie') +
-    '<div class="toolbar"><h2>' + (mode === 'list' ? 'Nadchodzące' : 'Kalendarz') + '</h2><div class="segmented" aria-label="Widok wydarzeń">' +
-    button('Lista', 'mode', 'list', 'aria-pressed="' + (mode === 'list') + '"') +
-    button('Kalendarz', 'mode', 'calendar', 'aria-pressed="' + (mode === 'calendar') + '"') + '</div></div>' +
-    (mode === 'calendar' ? calendar(events) : events.length ? eventGrid(events) :
+    '<h2 class="section-title">Nadchodzące</h2>' +
+    (events.length ? eventGrid(events) :
       empty('Na razie bez wydarzeń', 'Opublikowane wydarzenia pojawią się na tej liście.'));
 }
 
@@ -406,8 +425,10 @@ function adminVoyages() {
     card('<div class="admin-title"><div><h2>' + escape(voyage.name) + '</h2><p>' + escape(voyage.timeZone) + '</p></div>' +
       '<span class="pill positive">Aktywny rejs</span></div>' +
       button('Zakończ rejs', 'closeVoyage', voyage.id, '', 'danger')) +
-    card('<h2>Dodaj kabinę</h2>' + form('addCabin', field('Numer kabiny', 'label', '', 'required maxlength="24"') +
-      field('Liczba gości', 'capacity', '2', 'type="number" min="1" max="20" required'), submit('Dodaj kabinę'))) :
+    card('<h2>Dodaj kabiny</h2>' + form('addCabins',
+      textarea('Numery kabin', 'labels', '', 'required maxlength="4096" placeholder="101–110, A12" aria-describedby="cabin-hint"') +
+      '<p id="cabin-hint" class="input-note">Podaj pojedyncze numery i zakresy. Oddziel je przecinkami lub nowymi wierszami.</p>' +
+      field('Liczba gości na kabinę', 'capacity', '2', 'type="number" min="1" max="20" required'), submit('Dodaj kabiny'))) :
     card('<h2>Utwórz rejs</h2>' + form('createVoyage', field('Nazwa rejsu', 'name', '', 'required maxlength="80"') +
       field('Strefa czasowa', 'timeZone', 'Europe/Warsaw', 'required maxlength="80"'), submit('Utwórz rejs')))) + '</div>' +
     (voyage ? '<h2 class="section-title">Kabiny</h2>' + (cabins.length ? '<div class="rows">' + cabins.map(cabin =>
@@ -450,9 +471,8 @@ function renderAdmin() {
 
 function render(focus = false) {
   const {page, id} = route();
-  if (['aktywnosci', 'raporty', 'plan-zalogi', 'dziennik-raportow', 'kalendarz', 'zaloga', 'profil'].includes(page)) {
+  if (['aktywnosci', 'raporty', 'plan-zalogi', 'dziennik-raportow', 'zaloga', 'profil'].includes(page)) {
     const target = {zaloga: 'poznaj', profil: 'konto'}[page] || 'wydarzenia';
-    if (page === 'kalendarz') mode = 'calendar';
     history.replaceState(null, '', '#' + target);
     return render(focus);
   }
@@ -460,8 +480,14 @@ function render(focus = false) {
   const displayNav = Boolean(user) && page !== 'rejestracja';
   const parent = page === 'wydarzenie' ? 'wydarzenia' : page;
   nav.hidden = !displayNav;
-  nav.innerHTML = displayNav ? links.map(([key, label, glyph]) => '<a href="#' + key + '"' +
-    (parent === key ? ' aria-current="page"' : '') + '>' + icon(glyph) + '<span>' + label + '</span></a>').join('') : '';
+  nav.innerHTML = displayNav ? '<div class="nav-group" role="group" aria-labelledby="nav-life"><p id="nav-life">Życie na pokładzie</p>' +
+    links.map(([key, label]) => '<a href="#' + key + '"' +
+      (parent === key ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') + '</div>' : '';
+  sidebarProfile.hidden = !displayNav;
+  sidebarUserName.textContent = displayNav ? user.name || '' : '';
+  if (displayNav && page === 'konto') sidebarAccount.setAttribute('aria-current', 'page');
+  else sidebarAccount.removeAttribute('aria-current');
+  mapLink.hidden = displayNav;
   roleLink.hidden = !displayNav || user.role === 'guest';
   if (!roleLink.hidden) {
     roleLink.href = user.role === 'admin' ? '#admin' : '#planner';
@@ -470,11 +496,13 @@ function render(focus = false) {
   tripLabel.textContent = displayNav ? board.voyage?.name || '' : '';
   connection.hidden = !offline || !displayNav;
   connection.textContent = offline && cachedAt ? 'Offline · dane z ' + new Date(cachedAt).toLocaleString('pl-PL', {dateStyle: 'short', timeStyle: 'short'}) : '';
-  document.body.classList.toggle('with-nav', displayNav);
   const canUseBoard = board?.access && board.voyage;
-  if (page === 'rejestracja' || page === 'logowanie' || (!user && board)) content.innerHTML = renderLogin(page);
+  content.classList.toggle('map-content', page === 'mapa');
+  if (page === 'mapa') renderMap();
+  else if (page === 'rejestracja' || page === 'logowanie' || (!user && board)) content.innerHTML = renderLogin(page);
   else if (!board) content.innerHTML = empty('Ładujemy CrewConnect');
   else if (page === 'konto') content.innerHTML = account();
+  else if (page === 'kalendarz') content.innerHTML = renderCalendar();
   else if (page === 'admin' && user.role === 'admin') content.innerHTML = renderAdmin();
   else if (page === 'planner' && user.role === 'planner') content.innerHTML = planner();
   else if ((page === 'dodaj' || page === 'edytuj') && user.role !== 'guest') content.innerHTML = renderEventForm(id);
@@ -486,9 +514,14 @@ function render(focus = false) {
   else if (page === 'poznaj') content.innerHTML = renderPeople();
   else content.innerHTML = renderEvents();
   if (focus) {
-    content.querySelector('h1')?.focus({preventScroll: true});
+    (content.querySelector('h1') || content).focus({preventScroll: true});
     window.scrollTo(0, 0);
   }
+}
+
+function renderMap() {
+  if (content.querySelector('.ship-map-frame')) return;
+  content.innerHTML = '<iframe class="ship-map-frame" title="Mapa statku" src="navigation.html?embed=1"></iframe>';
 }
 
 function showResult(title, body, actions = '') {
@@ -563,12 +596,13 @@ async function mutate(payload, {message, after, onError} = {}) {
   requestVersion++;
   try {
     const result = await request(payload);
-    const {print, plannerCode, plannerEmail, ...next} = result;
+    const {print, plannerCode, plannerEmail, addedCabins, ...next} = result;
     writeLocal(logoutKey, null);
     updateBoard(next);
     if (after) after();
     render();
-    if (message) announce(message);
+    if (addedCabins) announce('Dodane kabiny: ' + addedCabins + '.');
+    else if (message) announce(message);
     if (print) showResult('Zaproszenie do kabiny', '<div class="qr-print"><h3>' + escape(print.voyage) +
       '</h3><p>Kabina ' + escape(print.cabin) + '</p><img width="250" height="250" alt="Kod QR do rejestracji" src="' +
       escape(print.image) + '"><p>Zeskanuj, aby dołączyć do rejsu.</p><a href="' + escape(print.url) + '">' +
@@ -594,7 +628,7 @@ content.addEventListener('submit', event => {
   const action = element.dataset.form;
   const payload = {action, ...data};
   if (action === 'register') payload.token = route().token;
-  if (action === 'addCabin') {
+  if (action === 'addCabins') {
     payload.voyageId = board.voyage.id;
     payload.capacity = Number(data.capacity);
   }
@@ -610,10 +644,12 @@ content.addEventListener('submit', event => {
   buttons.forEach(control => { control.disabled = true; });
   formError.hidden = true;
   const after = {
-    login: () => navigate('wydarzenia'), register: () => navigate('wydarzenia'),
+    login: () => navigate(route().token && board.user?.role === 'guest' && !board.user.cabin ?
+      'rejestracja?kod=' + encodeURIComponent(route().token) : 'wydarzenia'),
+    register: () => navigate('wydarzenia'),
     saveEvent: () => navigate(board.user.role === 'admin' ? 'admin' : 'planner')
   }[action];
-  const messages = {createVoyage: 'Utworzono rejs.', addCabin: 'Dodano kabinę.', profile: 'Zapisano profil.',
+  const messages = {createVoyage: 'Utworzono rejs.', profile: 'Zapisano profil.',
     saveEvent: payload.publish ? 'Zapisano opublikowane wydarzenie.' : 'Zapisano szkic.'};
   void mutate(payload, {after, message: messages[action], onError: message => {
     formError.textContent = message;
@@ -639,8 +675,8 @@ content.addEventListener('click', event => {
   if (!control || operation) return;
   const {action, id} = control.dataset;
   const localActions = {
-    mode: () => { mode = id; },
-    day: () => { day = id; },
+    today: () => { day = todayDate(); month = day.slice(0, 7); },
+    day: () => { day = id; month = day.slice(0, 7); },
     month: () => {
       const date = new Date(month + '-01T12:00Z');
       date.setUTCMonth(date.getUTCMonth() + Number(id));
@@ -732,7 +768,7 @@ if (apiBase && new URL(apiBase).origin !== location.origin) {
     if (!content.querySelector('form') && !dialog.open) onlineRefresh();
   });
   setInterval(() => {
-    if (!document.hidden && ['wydarzenia', 'moje-zapisy', 'wydarzenie', 'poznaj', 'planner', 'admin'].includes(route().page) &&
+    if (!document.hidden && ['wydarzenia', 'kalendarz', 'moje-zapisy', 'wydarzenie', 'poznaj', 'planner', 'admin'].includes(route().page) &&
         !content.querySelector('form:focus-within') && !dialog.open) void refresh();
   }, 15000);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
